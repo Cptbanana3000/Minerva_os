@@ -34,6 +34,11 @@ start:
     mov si, msg_loaded
     call print_string
 
+    ; Set VGA graphics mode 0x13 (320x200, 256 colors)
+    ; INT 0x10 AH=0 AL=0x13
+    mov ax, 0x0013
+    int 0x10
+
     ; Switch to protected mode
     cli
     lgdt [gdt_descriptor]
