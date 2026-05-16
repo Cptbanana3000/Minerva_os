@@ -33,6 +33,10 @@ void keyboard_irq_handler(void) {
     }
 }
 
+int keyboard_has_key(void) {
+    return kb_head != kb_tail;
+}
+
 /* Blocking read — waits until a key is in the buffer */
 char keyboard_read_key(void) {
     while (kb_head == kb_tail) {

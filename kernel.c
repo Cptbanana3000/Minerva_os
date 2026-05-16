@@ -10,6 +10,7 @@
 #include "graphics.h"
 #include "terminal.h"
 #include "window.h"
+#include "desktop.h"
 
 static void print(const char* s) {
     term_print(s);
@@ -40,6 +41,10 @@ static void read_line(char* buf, int max) {
     int len = 0;
     mouse_draw_cursor();
     while (1) {
+        /* Process GUI events while waiting for a key */
+        while (!keyboard_has_key()) {
+            if (desktop_process()) desktop_redraw();
+        }
         char c = keyboard_read_key();
         if (c == '\n') {
             term_putc('\n');
@@ -47,10 +52,7 @@ static void read_line(char* buf, int max) {
             graphics_flip();
             return;
         } else if (c == '\b') {
-            if (len > 0) {
-                len--;
-                term_putc('\b');
-            }
+            if (len > 0) { len--; term_putc('\b'); }
         } else if (len < max - 1) {
             buf[len++] = c;
             term_putc(c);
@@ -98,8 +100,8 @@ void kernel_main(void) {
     pit_init(100);
     interrupts_enable();
     mouse_init();
+    desktop_init();
 
-    /* Draw windows first */
     window_manager_init();
 
     window_t* win1 = window_create(10, 10, 120, 70, "System");
@@ -118,8 +120,7 @@ void kernel_main(void) {
     window_draw_string(win2, 4, 4, "Running", graphics_rgb(0, 128, 0));
 
     window_set_focus(win1);
-    window_manager_render_all();
-    graphics_flip();
+    desktop_redraw();
 
     /* Shell below windows */
     term_set_color(10);

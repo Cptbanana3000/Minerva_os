@@ -5,9 +5,6 @@
 #include "libc.h"
 #include "memory.h"
 
-#define TITLEBAR_HEIGHT 16
-#define WINDOW_BORDER 1
-
 typedef struct window {
     rect_t rect;
     char title[64];
@@ -15,6 +12,7 @@ typedef struct window {
     uint32_t title_bg_color;
     uint32_t title_fg_color;
     uint8_t focused;
+    uint8_t minimized;
     struct window* prev;
     struct window* next;
 } window_t;
@@ -146,7 +144,7 @@ void window_manager_remove(window_t* win) {
 }
 
 static void window_render(window_t* win) {
-    if (!win) return;
+    if (!win || win->minimized) return;
 
     uint32_t x = win->rect.x;
     uint32_t y = win->rect.y;
@@ -154,14 +152,49 @@ static void window_render(window_t* win) {
     uint32_t h = win->rect.height;
 
     graphics_fill_rect(x, y, w, h, win->bg_color);
+    graphics_fill_rect(x + WINDOW_BORDER, y + WINDOW_BORDER,
+                       w - 2 * WINDOW_BORDER, TITLEBAR_HEIGHT - WINDOW_BORDER,
+                       win->title_bg_color);
+    graphics_draw_string(x + WINDOW_BORDER + 4, y + WINDOW_BORDER + 4,
+                         win->title, win->title_fg_color, win->title_bg_color);
 
-    graphics_fill_rect(x + WINDOW_BORDER, y + WINDOW_BORDER, w - 2 * WINDOW_BORDER, TITLEBAR_HEIGHT - WINDOW_BORDER, win->title_bg_color);
+    /* Close button — red X, top-right 16×16 of titlebar */
+    graphics_fill_rect(x + w - 16, y, 16, TITLEBAR_HEIGHT, 4);
+    graphics_draw_char(x + w - 12, y + 4, 'X', 15, 4);
 
-    graphics_draw_string(x + WINDOW_BORDER + 4, y + WINDOW_BORDER + 4, win->title, win->title_fg_color, win->title_bg_color);
+    /* Minimize button — yellow -, just left of close */
+    graphics_fill_rect(x + w - 32, y, 16, TITLEBAR_HEIGHT, 6);
+    graphics_draw_char(x + w - 28, y + 4, '-', 0, 6);
 
-    uint32_t border_color = win->focused ? graphics_rgb(255, 200, 0) : graphics_rgb(100, 100, 100);
+    uint32_t border_color = win->focused ? graphics_rgb(255, 200, 0)
+                                         : graphics_rgb(100, 100, 100);
     graphics_draw_rect(x, y, w, h, border_color);
 }
+
+/* ---- new accessors / operations ---- */
+
+void window_set_pos(window_t* win, uint32_t x, uint32_t y) {
+    if (!win) return;
+    win->rect.x = x;
+    win->rect.y = y;
+}
+
+void window_toggle_minimize(window_t* win) {
+    if (win) win->minimized = !win->minimized;
+}
+
+uint8_t window_is_minimized(const window_t* win) {
+    return win ? win->minimized : 0;
+}
+
+uint32_t    window_get_x(const window_t* w)      { return w ? w->rect.x     : 0; }
+uint32_t    window_get_y(const window_t* w)      { return w ? w->rect.y     : 0; }
+uint32_t    window_get_width(const window_t* w)  { return w ? w->rect.width : 0; }
+uint32_t    window_get_height(const window_t* w) { return w ? w->rect.height: 0; }
+const char* window_get_title(const window_t* w)  { return w ? w->title      : ""; }
+
+window_t* window_manager_get_head(void)          { return window_list_head; }
+window_t* window_get_next(const window_t* w)     { return w ? w->next : NULL; }
 
 void window_manager_render_all(void) {
     /* Walk to the tail */
