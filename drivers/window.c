@@ -164,11 +164,18 @@ static void window_render(window_t* win) {
 }
 
 void window_manager_render_all(void) {
-    window_t* win = NULL;
-    window_t* next = window_list_head;
+    /* Walk to the tail */
+    window_t* tail = NULL;
+    window_t* win = window_list_head;
+    while (win != NULL) {
+        tail = win;
+        win = win->next;
+    }
 
-    for (win = next; win != NULL; win = next) {
-        next = win->next;
+    /* Render tail-to-head so focused window (head) draws last = on top */
+    win = tail;
+    while (win != NULL) {
         window_render(win);
+        win = win->prev;
     }
 }

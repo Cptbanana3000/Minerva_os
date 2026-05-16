@@ -9,12 +9,14 @@
 
 #define GRAPHICS_FRAMEBUFFER ((uint8_t*)0xA0000)
 
+static uint8_t back_buffer[GRAPHICS_WIDTH * GRAPHICS_HEIGHT];
+
 static graphics_mode_t graphics_mode = {
     .width = GRAPHICS_WIDTH,
     .height = GRAPHICS_HEIGHT,
     .bpp = GRAPHICS_BPP,
     .pitch = 320,
-    .framebuffer = GRAPHICS_FRAMEBUFFER,
+    .framebuffer = back_buffer,
 };
 
 static const uint8_t font_8x8[256][8] = {
@@ -223,6 +225,16 @@ void graphics_draw_string(uint32_t x, uint32_t y, const char* string, uint32_t c
         offset_x += 8;
         string++;
     }
+}
+
+void graphics_flip(void) {
+    uint8_t* fb = GRAPHICS_FRAMEBUFFER;
+    for (uint32_t i = 0; i < GRAPHICS_WIDTH * GRAPHICS_HEIGHT; i++)
+        fb[i] = back_buffer[i];
+}
+
+uint8_t* graphics_get_framebuffer(void) {
+    return back_buffer;
 }
 
 uint32_t graphics_rgb(uint8_t r, uint8_t g, uint8_t b) {

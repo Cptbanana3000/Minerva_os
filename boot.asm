@@ -22,7 +22,7 @@ start:
     ; Load kernel from disk to 0x1000
     ; Read 30 sectors starting from sector 2 (sector 1 is the boot sector)
     mov ah, 0x02        ; BIOS read sectors
-    mov al, 30          ; Number of sectors
+    mov al, 60          ; Number of sectors
     mov ch, 0           ; Cylinder 0
     mov cl, 2           ; Start from sector 2
     mov dh, 0           ; Head 0
@@ -34,8 +34,7 @@ start:
     mov si, msg_loaded
     call print_string
 
-    ; Set VGA graphics mode 0x13 (320x200, 256 colors)
-    ; INT 0x10 AH=0 AL=0x13
+     ; Switch to VGA mode 13h (320x200, 256 colors)
     mov ax, 0x0013
     int 0x10
 

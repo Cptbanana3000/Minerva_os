@@ -119,3 +119,343 @@ If you want to extend this: the standard reference is the OSDev wiki
 (wiki.osdev.org). Good next steps in order: (1) interrupt handling with an
 IDT, (2) a proper IRQ-driven keyboard driver, (3) a memory manager, (4) a
 simple filesystem.
+
+PHASE 1 — Foundation Stabilization
+Goal:
+
+Turn your current prototype into a cleaner architecture.
+
+1. Refactor project structure
+
+Move away from one big kernel.c.
+
+Recommended structure:
+
+MinervaOS/
+├── boot/
+├── kernel/
+├── drivers/
+├── graphics/
+├── memory/
+├── fs/
+├── apps/
+├── libc/
+├── include/
+├── userland/
+├── Makefile
+2. Build a tiny libc
+
+Implement:
+
+strlen
+memcpy
+memset
+strcpy
+printf-like output later
+
+This becomes your OS utility layer.
+
+3. Interrupt handling (VERY IMPORTANT)
+
+Implement:
+
+IDT
+ISRs
+PIC remapping
+
+This unlocks:
+
+keyboard interrupts
+timer interrupts
+real hardware event handling
+
+Huge milestone.
+
+4. PIT timer
+
+Add programmable interval timer.
+
+This enables:
+
+timekeeping
+scheduling
+sleep functions
+PHASE 2 — Memory Management
+Goal:
+
+Give Minerva OS real memory control.
+
+5. Heap allocator
+
+Implement:
+
+kmalloc()
+kfree()
+
+Now apps/drivers can allocate memory dynamically.
+
+6. Paging
+
+Huge milestone.
+
+Virtual Address→Page Tables→Physical Memory
+
+This enables:
+
+memory isolation
+larger systems
+future multitasking
+7. Physical memory manager
+
+Track:
+
+used pages
+free pages
+
+Essential for growth.
+
+PHASE 3 — Graphics System
+Goal:
+
+Escape VGA text mode.
+
+8. Framebuffer graphics
+
+Switch from:
+
+0xB8000 text mode
+
+to:
+
+pixel framebuffer
+
+This changes EVERYTHING.
+
+9. Graphics primitives
+
+Implement:
+
+put_pixel()
+draw_line()
+draw_rect()
+fill_rect()
+10. Font rendering
+
+Add bitmap fonts.
+
+Now you can:
+
+render GUI text
+labels
+windows
+buttons
+11. Double buffering
+
+Important for smooth rendering.
+
+Without this:
+
+flickering
+tearing
+PHASE 4 — Input & Desktop
+Goal:
+
+Create a usable GUI.
+
+12. Mouse driver
+
+Implement:
+
+PS/2 mouse
+cursor rendering
+click detection
+13. Window manager
+
+Create:
+
+draggable windows
+title bars
+close buttons
+
+At this point:
+Minerva OS becomes a GUI OS.
+
+14. Desktop environment
+
+Build:
+
+taskbar
+launcher
+wallpaper
+icons
+
+This is where Minerva gains personality.
+
+PHASE 5 — Filesystem
+Goal:
+
+Persistent storage.
+
+15. FAT32 support
+
+Start simple.
+
+You need:
+
+read files
+write files
+directories
+16. VFS layer
+
+Virtual filesystem abstraction.
+
+Lets you support:
+
+FAT
+ext-like systems
+custom filesystem later
+PHASE 6 — Applications
+Goal:
+
+Real software ecosystem.
+
+17. Terminal emulator
+
+Better shell experience.
+
+18. Text editor
+
+A HUGE milestone.
+
+Especially if:
+
+syntax highlighting
+file saving
+coding support
+19. Image viewer
+
+Start with:
+
+BMP
+
+Later:
+
+PNG
+JPEG
+20. Audio player
+
+Start with:
+
+WAV playback
+
+Later:
+
+MP3
+PHASE 7 — Multitasking
+Goal:
+
+Real operating system behavior.
+
+21. Scheduler
+
+Implement:
+
+round-robin scheduling initially
+22. Processes
+
+Add:
+
+process table
+context switching
+23. User mode (Ring 3)
+
+Huge architecture milestone.
+
+Ring 0 Kernel
+
+=Ring 3 Userland
+
+PHASE 8 — Networking
+Goal:
+
+Internet access.
+
+24. Ethernet driver
+
+Likely Intel e1000 first (easy in QEMU).
+
+25. TCP/IP stack
+
+Massive subsystem.
+
+26. DNS + HTTP
+
+Now Minerva can communicate online.
+
+PHASE 9 — Browser
+Goal:
+
+Your custom web ecosystem.
+
+27. HTML renderer
+
+Start tiny:
+
+plain HTML
+no JS initially
+28. CSS engine
+
+Basic styling.
+
+29. JavaScript engine (very advanced)
+
+This is HARD.
+
+Very long-term goal.
+
+PHASE 10 — Polish & Ecosystem
+Goal:
+
+Make it memorable.
+
+30. Package manager
+
+Example:
+
+pkg install editor
+31. Theming system
+
+Custom:
+
+colors
+icons
+UI styles
+32. App SDK
+
+Let others build apps for Minerva OS.
+
+33. Open source + community
+
+Eventually:
+
+GitHub repo
+docs
+screenshots
+devlogs
+contributors
+REALISTIC milestone order
+
+The BEST next steps for you specifically:
+
+1. Refactor codebase
+2. Interrupts + timer
+3. Framebuffer graphics
+4. Mouse support
+5. Window manager
+6. Filesystem
+7. Text editor
+8. Multitasking
+9. Networking
+10. Browser
+
+That progression is ambitious but absolutely logical.

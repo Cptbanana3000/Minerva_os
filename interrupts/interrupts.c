@@ -1,5 +1,6 @@
+#include "keyboard.h"   /* add this at the top */
 #include <stdint.h>
-
+#include "mouse.h"
 #include "interrupts.h"
 #include "io.h"
 #include "vga.h"
@@ -68,9 +69,10 @@ static void pic_remap(void) {
     outb(0x21, master_mask);
     outb(0xA1, slave_mask);
 
-    /* Keep only the timer IRQ enabled for now. */
-    outb(0x21, (uint8_t)(master_mask & 0xFE));
-    outb(0xA1, 0xFF);
+    /* Enable IRQ0 (timer), IRQ1 (keyboard), IRQ2 (cascade to slave). */
+    outb(0x21, (uint8_t)(master_mask & 0xF8));
+    /* Enable IRQ12 (mouse) on slave. */
+    outb(0xA1, (uint8_t)(slave_mask & 0xEF));
 }
 
 static void idt_set_gate(uint8_t interrupt_number, uint32_t base, uint16_t selector, uint8_t flags) {
@@ -102,9 +104,21 @@ void interrupts_enable(void) {
 }
 
 void interrupt_handler(interrupt_frame_t* frame) {
-    if (frame->int_no == 32) {
+    if (frame->int_no == 32) {        /* IRQ0 — timer */
         pit_tick();
         pic_send_eoi(0);
+        return;
+    }
+
+    if (frame->int_no == 33) {        /* IRQ1 — keyboard */
+        keyboard_irq_handler();
+        pic_send_eoi(1);
+        return;
+    }
+
+    if (frame->int_no == 44) {        /* IRQ12 — mouse */
+        mouse_irq_handler();
+        pic_send_eoi(12);
         return;
     }
 
@@ -115,9 +129,5 @@ void interrupt_handler(interrupt_frame_t* frame) {
 
     vga_set_color(0x4F);
     vga_print("CPU exception\n");
-    (void)frame;
-
-    while (1) {
-        __asm__ volatile ("hlt");
-    }
+    while (1) { __asm__ volatile ("hlt"); }
 }

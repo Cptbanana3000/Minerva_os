@@ -22,5 +22,7 @@ void graphics_draw_char(uint32_t x, uint32_t y, char character, uint32_t color, 
 void graphics_draw_string(uint32_t x, uint32_t y, const char* string, uint32_t color, uint32_t bg_color);
 
 uint32_t graphics_rgb(uint8_t r, uint8_t g, uint8_t b);
+void     graphics_flip(void);
+uint8_t* graphics_get_framebuffer(void);
 
 #endif
