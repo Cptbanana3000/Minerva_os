@@ -10,13 +10,31 @@
 #define TASK_BTN_W    58   /* taskbar window-button width */
 #define TASK_BTN_GAP   2
 
+#define MAX_ICONS      8
+#define ICON_W        16
+#define ICON_H        16
+
+/* ------------------------------------------------------------------ */
+/* Desktop icon                                                         */
+/* ------------------------------------------------------------------ */
+typedef struct {
+    int32_t  x, y;
+    char     label[8];
+    uint32_t color;
+    void   (*on_click)(void);
+} desktop_icon_t;
+
+static desktop_icon_t icons[MAX_ICONS];
+static int            icon_count = 0;
+
 /* ------------------------------------------------------------------ */
 /* Internal state                                                       */
 /* ------------------------------------------------------------------ */
-static window_t* drag_win    = NULL;
-static int32_t   drag_off_x  = 0;
-static int32_t   drag_off_y  = 0;
-static uint8_t   prev_btns   = 0;
+static window_t      *drag_win   = NULL;
+static int32_t        drag_off_x = 0;
+static int32_t        drag_off_y = 0;
+static uint8_t        prev_btns  = 0;
+static void         (*render_cb)(void) = NULL;
 
 /* ------------------------------------------------------------------ */
 /* Helpers                                                              */
@@ -88,9 +106,28 @@ static int window_click(int32_t mx, int32_t my) {
 /* ------------------------------------------------------------------ */
 /* Public API                                                           */
 /* ------------------------------------------------------------------ */
+void desktop_set_render_cb(void (*cb)(void)) {
+    render_cb = cb;
+}
+
+void desktop_add_icon(int32_t x, int32_t y, const char *label,
+                      uint32_t color, void (*on_click)(void)) {
+    if (icon_count >= MAX_ICONS) return;
+    desktop_icon_t *ic = &icons[icon_count++];
+    ic->x        = x;
+    ic->y        = y;
+    ic->color    = color;
+    ic->on_click = on_click;
+    int i = 0;
+    while (label[i] && i < 7) { ic->label[i] = label[i]; i++; }
+    ic->label[i] = 0;
+}
+
 void desktop_init(void) {
-    drag_win  = NULL;
-    prev_btns = 0;
+    drag_win   = NULL;
+    prev_btns  = 0;
+    icon_count = 0;
+    render_cb  = NULL;
 }
 
 int desktop_process(void) {
@@ -120,8 +157,25 @@ int desktop_process(void) {
     if (released & 0x01) drag_win = NULL;
 
     if (pressed & 0x01) {
-        if (my >= TASKBAR_Y) { taskbar_click(mx); dirty = 1; }
-        else                  dirty |= window_click(mx, my);
+        if (my >= TASKBAR_Y) {
+            taskbar_click(mx);
+            dirty = 1;
+        } else {
+            int hit = window_click(mx, my);
+            dirty |= hit;
+            /* Check icons only when no window was hit */
+            if (!hit) {
+                for (int i = 0; i < icon_count; i++) {
+                    desktop_icon_t *ic = &icons[i];
+                    if (in_rect(mx, my, ic->x, ic->y,
+                                ICON_W, ICON_H + 8)) {
+                        if (ic->on_click) ic->on_click();
+                        dirty = 1;
+                        break;
+                    }
+                }
+            }
+        }
     }
 
     return dirty;
@@ -131,8 +185,29 @@ void desktop_redraw(void) {
     /* Wallpaper */
     graphics_fill_rect(0, 0, 320, TASKBAR_Y, 1);   /* dark blue */
 
+    /* Icons — drawn on wallpaper before windows so windows appear on top */
+    for (int i = 0; i < icon_count; i++) {
+        desktop_icon_t *ic = &icons[i];
+        graphics_fill_rect((uint32_t)ic->x, (uint32_t)ic->y,
+                           ICON_W, ICON_H, ic->color);
+        graphics_draw_rect((uint32_t)ic->x, (uint32_t)ic->y,
+                           ICON_W, ICON_H, 15);  /* white border */
+        /* Label centered below */
+        int llen = 0;
+        while (ic->label[llen]) llen++;
+        int32_t lx = ic->x + ICON_W / 2 - (llen * 8) / 2;
+        if (lx < 0) lx = 0;
+        for (int ci = 0; ci < llen; ci++)
+            graphics_draw_char((uint32_t)(lx + ci * 8),
+                               (uint32_t)(ic->y + ICON_H + 1),
+                               ic->label[ci], 15, 1);  /* white on dark blue */
+    }
+
     /* Windows */
     window_manager_render_all();
+
+    /* Window content (terminal text, etc.) drawn after window frames */
+    if (render_cb) render_cb();
 
     /* Taskbar */
     graphics_fill_rect(0, TASKBAR_Y, 320, TASKBAR_H, 7);  /* light gray */

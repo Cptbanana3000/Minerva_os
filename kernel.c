@@ -8,145 +8,104 @@
 #include "paging.h"
 #include "serial.h"
 #include "graphics.h"
-#include "terminal.h"
 #include "window.h"
 #include "desktop.h"
+#include "term_window.h"
 
-static void print(const char* s) {
-    term_print(s);
-    serial_write(s);
-    graphics_flip();
-}
+/* ------------------------------------------------------------------ */
+/* Globals                                                              */
+/* ------------------------------------------------------------------ */
+static term_window_t *g_tw    = NULL;
+static window_t      *g_about = NULL;
 
-static void print_num(uint32_t n) {
-    char buf[12];
-    int i = 11;
-    buf[i] = '\0';
-    if (n == 0) { print("0"); return; }
-    while (n > 0) { buf[--i] = '0' + (char)(n % 10); n /= 10; }
-    print(buf + i);
-}
+/* ------------------------------------------------------------------ */
+/* Render callback — called by desktop_redraw() after window frames    */
+/* ------------------------------------------------------------------ */
+static void render_all(void) {
+    if (g_tw) term_window_render(g_tw);
 
-static void cmd_meminfo(void) {
-    uint32_t free_kb  = pmm_free_pages()  * 4;
-    uint32_t used_kb  = pmm_used_pages()  * 4;
-    uint32_t total_kb = pmm_total_pages() * 4;
-    print("Memory (4 KB pages, 32 MB physical):\n");
-    print("  Total : "); print_num(total_kb); print(" KB\n");
-    print("  Used  : "); print_num(used_kb);  print(" KB\n");
-    print("  Free  : "); print_num(free_kb);  print(" KB\n");
-}
-
-static void read_line(char* buf, int max) {
-    int len = 0;
-    mouse_draw_cursor();
-    while (1) {
-        /* Process GUI events while waiting for a key */
-        while (!keyboard_has_key()) {
-            if (desktop_process()) desktop_redraw();
-        }
-        char c = keyboard_read_key();
-        if (c == '\n') {
-            term_putc('\n');
-            buf[len] = 0;
-            graphics_flip();
-            return;
-        } else if (c == '\b') {
-            if (len > 0) { len--; term_putc('\b'); }
-        } else if (len < max - 1) {
-            buf[len++] = c;
-            term_putc(c);
-        }
-        mouse_draw_cursor();
+    /* About window content redrawn every frame (window_render erases bg) */
+    if (g_about && !window_is_minimized(g_about)) {
+        uint32_t blk = graphics_rgb(0, 0, 0);
+        uint32_t grn = graphics_rgb(0, 200, 0);
+        window_draw_string(g_about,  4,  4, "MinervaOS v0.3",   blk);
+        window_draw_string(g_about,  4, 16, "Phase 3: Desktop", blk);
+        window_draw_string(g_about,  4, 28, "x86 32-bit OS",    blk);
+        window_draw_string(g_about,  4, 40, "320x200 VGA",      grn);
+        window_draw_string(g_about,  4, 52, "IRQ kbd + mouse",  grn);
     }
 }
 
-static void cmd_help(void) {
-    print("Available commands:\n");
-    print("  help    - show this message\n");
-    print("  clear   - clear the screen\n");
-    print("  about   - about this OS\n");
-    print("  echo    - print 'Hello from MinervaOS!'\n");
-    print("  meminfo - show physical memory usage\n");
-    print("  reboot  - reboot the system\n");
+/* ------------------------------------------------------------------ */
+/* Icon callbacks                                                       */
+/* ------------------------------------------------------------------ */
+static void open_terminal(void) {
+    if (!g_tw) return;
+    if (window_is_minimized(g_tw->win))
+        window_toggle_minimize(g_tw->win);
+    window_set_focus(g_tw->win);
 }
 
-static void cmd_about(void) {
-    print("MinervaOS - a tiny x86 kernel\n");
-    print("Bootloader + 32-bit protected mode\n");
-    print("320x200 256-color graphics\n");
-    print("IRQ-driven PS/2 keyboard\n");
+static void open_about(void) {
+    if (!g_about) return;
+    if (window_is_minimized(g_about))
+        window_toggle_minimize(g_about);
+    window_set_focus(g_about);
 }
 
-static void reboot(void) {
-    while (inb(0x64) & 0x02) {}
-    outb(0x64, 0xFE);
-    __asm__ volatile ("cli; hlt");
-}
-
+/* ------------------------------------------------------------------ */
+/* Kernel entry                                                         */
+/* ------------------------------------------------------------------ */
 void kernel_main(void) {
     extern uint32_t __kernel_end;
     pmm_init((uint32_t)&__kernel_end);
     paging_init();
-
     heap_init();
     serial_init();
     serial_write("MinervaOS booting...\n");
 
     graphics_init();
-    term_clear();
-
     interrupts_init();
     pit_init(100);
     interrupts_enable();
     mouse_init();
     desktop_init();
-
     window_manager_init();
 
-    window_t* win1 = window_create(10, 10, 120, 70, "System");
-    window_set_bg_color(win1, graphics_rgb(180, 180, 180));
-    window_manager_add(win1);
+    /* Terminal window — primary interface */
+    g_tw = term_window_create(50, 15);
+    window_manager_add(g_tw->win);
 
-    window_t* win2 = window_create(140, 10, 120, 70, "Status");
-    window_set_bg_color(win2, graphics_rgb(200, 200, 180));
-    window_manager_add(win2);
+    /* About window — starts minimized, opened via icon */
+    g_about = window_create(10, 10, 130, 76, "About");
+    window_set_bg_color(g_about, graphics_rgb(200, 200, 200));
+    window_manager_add(g_about);
+    window_toggle_minimize(g_about);
 
-    window_clear(win1, graphics_rgb(180, 180, 180));
-    window_draw_string(win1, 4, 4, "OK", graphics_rgb(0, 0, 0));
-    window_draw_string(win1, 4, 20, "Ready", graphics_rgb(0, 128, 0));
+    window_set_focus(g_tw->win);
 
-    window_clear(win2, graphics_rgb(200, 200, 180));
-    window_draw_string(win2, 4, 4, "Running", graphics_rgb(0, 128, 0));
+    /* Register render callback so window content is drawn each frame */
+    desktop_set_render_cb(render_all);
 
-    window_set_focus(win1);
+    /* Desktop icons */
+    desktop_add_icon(4,  8, "Term", 10, open_terminal);  /* bright green */
+    desktop_add_icon(4, 40, "Info",  3, open_about);     /* cyan */
+
     desktop_redraw();
 
-    /* Shell below windows */
-    term_set_color(10);
-    print("\n\n\n\n\n\n\n\n\n\n\n");
-    print("  Welcome to MinervaOS\n");
-    term_set_color(15);
-    print("  Type 'help' for commands.\n\n");
-
-    
-    char line[128];
+    /* ---- Main event loop ---- */
     while (1) {
-        term_set_color(14);
-        print("minerva> ");
-        term_set_color(15);
-        read_line(line, sizeof(line));
-        if (line[0] == 0) continue;
-        else if (strcmp(line, "help") == 0)    cmd_help();
-        else if (strcmp(line, "clear") == 0)   term_clear();
-        else if (strcmp(line, "about") == 0)   cmd_about();
-        else if (strcmp(line, "echo") == 0)    print("Hello from MinervaOS!\n");
-        else if (strcmp(line, "meminfo") == 0) cmd_meminfo();
-        else if (strcmp(line, "reboot") == 0)  reboot();
-        else {
-            print("Unknown command: ");
-            print(line);
-            print("\n");
+        if (desktop_process()) desktop_redraw();
+
+        if (keyboard_has_key()) {
+            char c = keyboard_read_key();
+            /* Route keyboard to terminal window when it is focused */
+            if (g_tw &&
+                window_manager_get_head() == g_tw->win &&
+                !window_is_minimized(g_tw->win)) {
+                term_window_handle_key(g_tw, c);
+                desktop_redraw();
+            }
         }
     }
 }

@@ -44,6 +44,9 @@ drivers/mouse.o: drivers/mouse.c include/mouse.h include/io.h include/graphics.h
 drivers/desktop.o: drivers/desktop.c include/desktop.h include/graphics.h include/window.h include/mouse.h
 	$(CC) $(CFLAGS) $(INCLUDES) drivers/desktop.c -o drivers/desktop.o
 
+drivers/term_window.o: drivers/term_window.c include/term_window.h include/window.h include/graphics.h include/libc.h include/serial.h include/pmm.h include/io.h
+	$(CC) $(CFLAGS) $(INCLUDES) drivers/term_window.c -o drivers/term_window.o
+
 memory/allocator.o: memory/allocator.c include/memory.h
 	$(CC) $(CFLAGS) $(INCLUDES) memory/allocator.c -o memory/allocator.o
 
@@ -59,14 +62,14 @@ interrupts/interrupts.o: interrupts/interrupts.c include/interrupts.h include/io
 interrupts/pit.o: interrupts/pit.c include/interrupts.h include/io.h
 	$(CC) $(CFLAGS) $(INCLUDES) interrupts/pit.c -o interrupts/pit.o
 
-kernel.o: kernel.c include/io.h include/keyboard.h include/interrupts.h include/libc.h include/memory.h include/serial.h include/vga.h include/graphics.h include/window.h include/terminal.h include/mouse.h
+kernel.o: kernel.c include/io.h include/keyboard.h include/interrupts.h include/libc.h include/memory.h include/serial.h include/graphics.h include/window.h include/desktop.h include/term_window.h include/mouse.h include/pmm.h include/paging.h
 	$(CC) $(CFLAGS) $(INCLUDES) kernel.c -o kernel.o
 
 interrupts/isr.o: interrupts/isr.asm
 	$(ASM) -f elf32 interrupts/isr.asm -o interrupts/isr.o
 
-kernel.bin: kernel_entry.o interrupts/isr.o libc/string.o drivers/vga.o drivers/keyboard.o drivers/serial.o drivers/graphics.o drivers/window.o drivers/terminal.o drivers/desktop.o memory/allocator.o memory/pmm.o memory/paging.o interrupts/interrupts.o interrupts/pit.o kernel.o linker.ld drivers/mouse.o
-	$(LD) $(LDFLAGS) -o kernel.bin kernel_entry.o interrupts/isr.o libc/string.o drivers/vga.o drivers/keyboard.o drivers/serial.o drivers/graphics.o drivers/window.o drivers/terminal.o drivers/desktop.o memory/allocator.o memory/pmm.o memory/paging.o interrupts/interrupts.o interrupts/pit.o kernel.o drivers/mouse.o
+kernel.bin: kernel_entry.o interrupts/isr.o libc/string.o drivers/vga.o drivers/keyboard.o drivers/serial.o drivers/graphics.o drivers/window.o drivers/terminal.o drivers/desktop.o drivers/term_window.o memory/allocator.o memory/pmm.o memory/paging.o interrupts/interrupts.o interrupts/pit.o kernel.o linker.ld drivers/mouse.o
+	$(LD) $(LDFLAGS) -o kernel.bin kernel_entry.o interrupts/isr.o libc/string.o drivers/vga.o drivers/keyboard.o drivers/serial.o drivers/graphics.o drivers/window.o drivers/terminal.o drivers/desktop.o drivers/term_window.o memory/allocator.o memory/pmm.o memory/paging.o interrupts/interrupts.o interrupts/pit.o kernel.o drivers/mouse.o
 	
 os-image.bin: boot.bin kernel.bin
 	cat boot.bin kernel.bin > os-image.bin
