@@ -77,7 +77,7 @@ os-image.bin: boot.bin kernel.bin
 	truncate -s 40960 os-image.bin
 
 run: os-image.bin
-	qemu-system-i386 -drive format=raw,file=os-image.bin
+	qemu-system-i386 -m 32 -drive format=raw,file=os-image.bin,if=ide,index=0,media=disk
 
 clean:
 	rm -f *.bin *.o libc/*.o drivers/*.o interrupts/*.o memory/*.o os-image.bin
