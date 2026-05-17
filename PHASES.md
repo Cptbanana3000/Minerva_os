@@ -47,7 +47,7 @@
 
 ---
 
-## Phase 3 — Desktop GUI `IN PROGRESS`
+## Phase 3 — Desktop GUI `COMPLETE`
 
 > Usable graphical desktop environment.
 
@@ -56,8 +56,8 @@
 - [x] Close button (red X — destroys window)
 - [x] Minimize button (yellow — — hides window, shows in taskbar)
 - [x] Taskbar (bottom bar, window buttons, click to focus/restore)
-- [ ] Desktop icons (clickable icons on wallpaper)
-- [ ] Terminal emulator app (window-based shell)
+- [x] Desktop icons (clickable icons on wallpaper)
+- [x] Terminal emulator app (window-based shell)
 
 ---
 
@@ -134,7 +134,7 @@
 | 0 | Foundation | ✅ Complete |
 | 1 | Stabilize + Input | ✅ Complete |
 | 2 | Memory | ✅ Complete |
-| 3 | Desktop GUI | 🔄 In Progress (5/7) |
+| 3 | Desktop GUI | ✅ Complete |
 | 4 | Filesystem | ⬜ Not started |
 | 5 | Multitasking | ⬜ Not started |
 | 6 | Applications | ⬜ Not started |

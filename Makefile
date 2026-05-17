@@ -77,7 +77,8 @@ os-image.bin: boot.bin kernel.bin
 	truncate -s 40960 os-image.bin
 
 run: os-image.bin
-	qemu-system-i386 -drive format=raw,file=os-image.bin
+	cp os-image.bin /mnt/c/Users/joell/Downloads/os-image.bin
+	powershell.exe -ExecutionPolicy Bypass -File "C:\\Users\\joell\\launch-minerva.ps1"
 
 clean:
 	rm -f *.bin *.o libc/*.o drivers/*.o interrupts/*.o memory/*.o os-image.bin
