@@ -131,6 +131,8 @@ term_window_t *term_window_create(uint32_t x, uint32_t y) {
     term_window_t *t = &g_tw;
     /* 200 wide, 100 tall: client = 198 x 82 → 24 cols x 10 rows */
     t->win = window_create(x, y, 200, 100, "Terminal");
+    if (!t->win) return NULL;
+
     window_set_bg_color(t->win, 0);       /* black interior */
     window_set_title_color(t->win, 8, 10); /* dark-gray bar, green label */
 

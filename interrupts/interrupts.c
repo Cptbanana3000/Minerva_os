@@ -127,7 +127,20 @@ void interrupt_handler(interrupt_frame_t* frame) {
         return;
     }
 
-    vga_set_color(0x4F);
-    vga_print("CPU exception\n");
+    /* In mode 13h, VGA text buffer (0xB8000) is invisible. Write directly
+       to the graphics framebuffer so the crash is actually visible. */
+    uint8_t *fb = (uint8_t*)0xA0000;
+    /* Fill top half red (color 12), bottom half dark red (color 4) */
+    for (uint32_t i = 0; i < 320 * 100; i++) fb[i] = 12;
+    for (uint32_t i = 320 * 100; i < 320 * 200; i++) fb[i] = 4;
+    /* Draw white bars encoding the interrupt number (one bar per bit) */
+    for (uint8_t bit = 0; bit < 8; bit++) {
+        if (frame->int_no & (1u << bit)) {
+            uint32_t bx = 10 + bit * 20;
+            for (uint32_t row = 10; row < 60; row++)
+                for (uint32_t col = bx; col < bx + 12; col++)
+                    fb[row * 320 + col] = 15;  /* white */
+        }
+    }
     while (1) { __asm__ volatile ("hlt"); }
 }

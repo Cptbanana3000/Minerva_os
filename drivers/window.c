@@ -37,6 +37,7 @@ window_t* window_create(uint32_t x, uint32_t y, uint32_t width, uint32_t height,
     win->title_bg_color = graphics_rgb(0, 0, 128);
     win->title_fg_color = graphics_rgb(255, 255, 255);
     win->focused = 0;
+    win->minimized = 0;
     win->prev = NULL;
     win->next = NULL;
 

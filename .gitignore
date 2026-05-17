@@ -1,0 +1,6 @@
+# Compiled objects and binaries
+*.o
+*.bin
+
+# Claude Code
+.claude/

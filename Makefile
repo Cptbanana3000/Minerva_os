@@ -70,15 +70,16 @@ interrupts/isr.o: interrupts/isr.asm
 
 kernel.bin: kernel_entry.o interrupts/isr.o libc/string.o drivers/vga.o drivers/keyboard.o drivers/serial.o drivers/graphics.o drivers/window.o drivers/terminal.o drivers/desktop.o drivers/term_window.o memory/allocator.o memory/pmm.o memory/paging.o interrupts/interrupts.o interrupts/pit.o kernel.o linker.ld drivers/mouse.o
 	$(LD) $(LDFLAGS) -o kernel.bin kernel_entry.o interrupts/isr.o libc/string.o drivers/vga.o drivers/keyboard.o drivers/serial.o drivers/graphics.o drivers/window.o drivers/terminal.o drivers/desktop.o drivers/term_window.o memory/allocator.o memory/pmm.o memory/paging.o interrupts/interrupts.o interrupts/pit.o kernel.o drivers/mouse.o
+	@test $$(wc -c < kernel.bin) -le 27648 || { echo "kernel.bin too large for bootloader load window"; exit 1; }
 
 os-image.bin: boot.bin kernel.bin
 	cat boot.bin kernel.bin > os-image.bin
-	# Pad to a sensible size (16 sectors after boot = ~8KB total minimum)
-	truncate -s 40960 os-image.bin
+	# Pad to a 1.44 MB floppy image so BIOS CHS geometry is predictable.
+	truncate -s 1474560 os-image.bin
 
 run: os-image.bin
 	cp os-image.bin /mnt/c/Users/joell/Downloads/os-image.bin
-	powershell.exe -ExecutionPolicy Bypass -File "C:\\Users\\joell\\launch-minerva.ps1"
+	powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "& 'C:\Program Files\qemu\qemu-system-i386.exe' -drive file='C:\Users\joell\Downloads\os-image.bin',format=raw,if=floppy -boot a -no-reboot -no-shutdown"
 
 clean:
 	rm -f *.bin *.o libc/*.o drivers/*.o interrupts/*.o memory/*.o os-image.bin

@@ -19,17 +19,43 @@ start:
     mov si, msg_boot
     call print_string
 
-    ; Load kernel from disk to 0x1000
-    ; Read 30 sectors starting from sector 2 (sector 1 is the boot sector)
-    mov ah, 0x02        ; BIOS read sectors
-    mov al, 60          ; Number of sectors
-    mov ch, 0           ; Cylinder 0
-    mov cl, 2           ; Start from sector 2
-    mov dh, 0           ; Head 0
+    ; Load kernel from disk to 0x1000.
+    ; Read one sector at a time so BIOSes that reject cross-track reads
+    ; still load the whole kernel reliably.
+    mov word [load_dest], 0x1000
+    mov byte [load_count], KERNEL_SECTORS
+    mov byte [load_cyl], 0
+    mov byte [load_head], 0
+    mov byte [load_sec], 2       ; sector 1 is the boot sector
+
+.load_kernel:
+    mov ah, 0x02                 ; BIOS read sectors
+    mov al, 1
+    mov ch, [load_cyl]
+    mov cl, [load_sec]
+    mov dh, [load_head]
     mov dl, [boot_drive]
-    mov bx, 0x1000      ; Load to ES:BX = 0x0000:0x1000
+    mov bx, [load_dest]          ; ES:BX = 0x0000:load_dest
     int 0x13
     jc disk_error
+
+    add word [load_dest], 512
+
+    inc byte [load_sec]
+    cmp byte [load_sec], 19      ; 1.44M floppy: sectors 1..18
+    jb .next_sector
+
+    mov byte [load_sec], 1
+    inc byte [load_head]
+    cmp byte [load_head], 2
+    jb .next_sector
+
+    mov byte [load_head], 0
+    inc byte [load_cyl]
+
+.next_sector:
+    dec byte [load_count]
+    jnz .load_kernel
 
     mov si, msg_loaded
     call print_string
@@ -112,9 +138,18 @@ DATA_SEG equ gdt_data - gdt_start
 
 ; ==== Data ====
 boot_drive:   db 0
+load_dest:    dw 0
+load_count:   db 0
+load_cyl:     db 0
+load_head:    db 0
+load_sec:     db 0
 msg_boot:     db "Booting MyOS...", 13, 10, 0
 msg_loaded:   db "Kernel loaded.", 13, 10, 0
 msg_disk_err: db "Disk error!", 13, 10, 0
+
+; Maximum safe load below the boot sector:
+; (0x7C00 - 0x1000) / 512 = 54 sectors.
+KERNEL_SECTORS equ 54
 
 ; Pad to 510 bytes and add boot signature
 times 510 - ($ - $$) db 0

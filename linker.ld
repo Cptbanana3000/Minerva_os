@@ -18,8 +18,10 @@ SECTIONS
     }
 
     .bss : {
+        __bss_start = .;
         *(.bss)
         *(COMMON)
+        __bss_end = .;
     }
 
     __kernel_end = .;

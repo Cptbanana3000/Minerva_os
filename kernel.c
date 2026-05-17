@@ -65,24 +65,44 @@ void kernel_main(void) {
     serial_write("MinervaOS booting...\n");
 
     graphics_init();
+
+/* Draw a yellow pixel at column N, row 0, then flip — lets us see
+   exactly how far boot reaches when QEMU serial isn't available. */
+#define STEP(n) do { \
+    graphics_put_pixel((n) * 4, 0, 14); \
+    graphics_put_pixel((n) * 4, 1, 14); \
+    graphics_put_pixel((n) * 4 + 1, 0, 14); \
+    graphics_put_pixel((n) * 4 + 1, 1, 14); \
+    graphics_flip(); \
+} while (0)
+
+    STEP(1);
     interrupts_init();
+    STEP(2);
     pit_init(100);
     interrupts_enable();
+    STEP(3);
     mouse_init();
+    STEP(4);
     desktop_init();
     window_manager_init();
+    STEP(5);
 
     /* Terminal window — primary interface */
     g_tw = term_window_create(50, 15);
-    window_manager_add(g_tw->win);
+    STEP(6);
+    if (g_tw) window_manager_add(g_tw->win);
 
     /* About window — starts minimized, opened via icon */
     g_about = window_create(10, 10, 130, 76, "About");
-    window_set_bg_color(g_about, graphics_rgb(200, 200, 200));
-    window_manager_add(g_about);
-    window_toggle_minimize(g_about);
+    STEP(7);
+    if (g_about) {
+        window_set_bg_color(g_about, graphics_rgb(200, 200, 200));
+        window_manager_add(g_about);
+        window_toggle_minimize(g_about);
+    }
 
-    window_set_focus(g_tw->win);
+    if (g_tw) window_set_focus(g_tw->win);
 
     /* Register render callback so window content is drawn each frame */
     desktop_set_render_cb(render_all);
@@ -90,8 +110,10 @@ void kernel_main(void) {
     /* Desktop icons */
     desktop_add_icon(4,  8, "Term", 10, open_terminal);  /* bright green */
     desktop_add_icon(4, 40, "Info",  3, open_about);     /* cyan */
+    STEP(8);
 
     desktop_redraw();
+#undef STEP
 
     /* ---- Main event loop ---- */
     while (1) {
