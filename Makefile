@@ -70,7 +70,7 @@ interrupts/isr.o: interrupts/isr.asm
 
 kernel.bin: kernel_entry.o interrupts/isr.o libc/string.o drivers/vga.o drivers/keyboard.o drivers/serial.o drivers/graphics.o drivers/window.o drivers/terminal.o drivers/desktop.o drivers/term_window.o memory/allocator.o memory/pmm.o memory/paging.o interrupts/interrupts.o interrupts/pit.o kernel.o linker.ld drivers/mouse.o
 	$(LD) $(LDFLAGS) -o kernel.bin kernel_entry.o interrupts/isr.o libc/string.o drivers/vga.o drivers/keyboard.o drivers/serial.o drivers/graphics.o drivers/window.o drivers/terminal.o drivers/desktop.o drivers/term_window.o memory/allocator.o memory/pmm.o memory/paging.o interrupts/interrupts.o interrupts/pit.o kernel.o drivers/mouse.o
-	
+
 os-image.bin: boot.bin kernel.bin
 	cat boot.bin kernel.bin > os-image.bin
 	# Pad to a sensible size (16 sectors after boot = ~8KB total minimum)
