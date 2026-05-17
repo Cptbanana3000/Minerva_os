@@ -416,12 +416,13 @@ wc -c kernel.bin
 The kernel must stay below the bootloader load limit:
 
 ```text
-27648 bytes
+131072 bytes
 ```
 
-The project now builds C code with `-Os` to keep the kernel inside that window.
-This avoided expanding the bootloader load area while filesystem code was still
-being stabilized.
+The kernel originally loaded at `0x1000`, which capped it at 27648 bytes before
+it would collide with the boot sector area. Before attempting preemptive
+scheduling, the bootloader and linker were moved to load/link the kernel at
+`0x8000`, giving a conservative 128 KiB kernel window below the `0x90000` stack.
 
 QEMU is used for behavioral verification. Important smoke tests so far:
 
@@ -490,10 +491,32 @@ Phase 4 is complete. Phase 5 has begun with a non-invasive scheduler skeleton:
   switch count.
 - `tasks` also shows timer schedule requests, proving IRQ0 is driving the
   scheduler decision point before true interrupt-frame switching is attempted.
+- The interrupt frame layout is now public in `interrupts.h`, and IRQ0 frames
+  are sampled by the scheduler so the future preemptive switch code can be
+  built against the real saved-register shape.
+- `interrupt_handler()` now returns a possible replacement ESP, and the common
+  ISR stub will restore through that ESP if it is nonzero. For now all paths
+  return `0`, so this is plumbing only and does not switch tasks inside IRQ0.
+- IRQ0 now calls `scheduler_on_timer_interrupt(frame)`, which is the future
+  preemptive scheduling decision point. It currently records the frame and
+  returns `0`, preserving behavior.
+- Each demo task now also has a manufactured interrupt-frame context with
+  kernel code/data segments and `eflags=0x202`. These frames are not restored
+  from IRQ0 yet, but they match the common ISR epilogue shape.
+- The timer interrupt path can now choose a next task candidate when a quantum
+  expires, and the terminal `tasks` command shows this as `Cand`. The
+  `SCHED_PREEMPTIVE_ENABLED` gate is still `0`, so IRQ0 records candidates but
+  deliberately returns `0` instead of switching stacks.
+- A runtime `preempt on` / `preempt off` gate was added for controlled testing.
+  The IRQ0 scheduler path now refuses to switch when the interrupted code is
+  not already running on a task stack, and `tasks` reports those refusals as
+  `Block`. This protects the desktop/main loop until it becomes a real
+  schedulable context.
 
 This is still cooperative rather than preemptive, but it now performs real
 kernel-stack switching. Timer interrupts request scheduling; the main loop still
 performs the actual switch safely outside the IRQ handler.
 
-The next safe Phase 5 slice is moving the switch point into the timer interrupt
-path so round-robin scheduling becomes preemptive.
+The next safe Phase 5 slice is making the main/desktop loop an explicit
+schedulable context, so IRQ0 can switch away from it and later return to it
+without losing the GUI event loop.

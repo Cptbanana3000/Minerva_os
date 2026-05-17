@@ -141,6 +141,12 @@ isr_common_stub:
     call interrupt_handler
     add esp, 4
 
+    test eax, eax
+    jz .no_context_switch
+    mov esp, eax
+
+.no_context_switch:
+
     popa
     pop gs
     pop fs

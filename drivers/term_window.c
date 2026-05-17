@@ -88,7 +88,7 @@ static void tw_exec(term_window_t *t) {
         term_window_print(t, "echo meminfo tasks\n");
         term_window_print(t, "ls cat touch write\n");
         term_window_print(t, "append truncate delete\n");
-        term_window_print(t, "rename reboot\n");
+        term_window_print(t, "rename preempt reboot\n");
     } else if (strcmp(cmd, "clear") == 0) {
         memset(t->buf, 0, sizeof(t->buf));
         t->cur_col = 0;
@@ -116,7 +116,35 @@ static void tw_exec(term_window_t *t) {
         term_window_print(t, "TimerReq:");
         tw_print_num(t, scheduler_timer_request_count());
         term_window_putc(t, '\n');
+        term_window_print(t, "IRQFrames:");
+        tw_print_num(t, scheduler_irq_frame_count());
+        term_window_putc(t, '\n');
+        term_window_print(t, "IRQCtx:");
+        tw_print_num(t, scheduler_irq_context_count());
+        term_window_putc(t, '\n');
+        term_window_print(t, "Cand:");
+        tw_print_num(t, scheduler_irq_candidate_count());
+        term_window_putc(t, '\n');
+        term_window_print(t, "PMode:");
+        tw_print_num(t, scheduler_preemptive_enabled());
+        term_window_putc(t, '\n');
+        term_window_print(t, "IRQSw:");
+        tw_print_num(t, scheduler_irq_preempt_switch_count());
+        term_window_putc(t, '\n');
+        term_window_print(t, "Block:");
+        tw_print_num(t, scheduler_irq_preempt_blocked_count());
+        term_window_putc(t, '\n');
         scheduler_list(tw_task_entry, t);
+    } else if (strcmp(cmd, "preempt") == 0) {
+        term_window_print(t, "PMode:");
+        tw_print_num(t, scheduler_preemptive_enabled());
+        term_window_putc(t, '\n');
+    } else if (strcmp(cmd, "preempt on") == 0) {
+        scheduler_set_preemptive_enabled(1);
+        term_window_print(t, "PMode:1\n");
+    } else if (strcmp(cmd, "preempt off") == 0) {
+        scheduler_set_preemptive_enabled(0);
+        term_window_print(t, "PMode:0\n");
     } else if (strcmp(cmd, "ls") == 0) {
         if (!fs_is_ready()) {
             term_window_print(t, "No filesystem\n");

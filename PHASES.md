@@ -93,6 +93,13 @@
 - [x] Kernel task stacks
 - [x] Cooperative context switch (ESP save/restore)
 - [x] Timer-requested scheduling plumbing
+- [x] Interrupt-frame scheduling metadata
+- [x] ISR return-ESP switch hook
+- [x] Timer interrupt scheduler decision hook
+- [x] Fake interrupt-frame task contexts
+- [x] Disabled preemptive switch candidate path
+- [x] Runtime preemption gate
+- [x] Unsafe IRQ preemption guard
 - [ ] Preemptive round-robin scheduler
 - [ ] Process table
 - [ ] Context switching (save/restore CPU state)

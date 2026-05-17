@@ -2,6 +2,7 @@
 #include <stdint.h>
 #include "mouse.h"
 #include "interrupts.h"
+#include "scheduler.h"
 #include "io.h"
 #include "vga.h"
 
@@ -17,28 +18,6 @@ typedef struct __attribute__((packed)) idt_ptr {
     uint16_t limit;
     uint32_t base;
 } idt_ptr_t;
-
-struct __attribute__((packed)) interrupt_frame {
-    uint32_t edi;
-    uint32_t esi;
-    uint32_t ebp;
-    uint32_t esp_dummy;
-    uint32_t ebx;
-    uint32_t edx;
-    uint32_t ecx;
-    uint32_t eax;
-    uint32_t gs;
-    uint32_t fs;
-    uint32_t es;
-    uint32_t ds;
-    uint32_t int_no;
-    uint32_t err_code;
-    uint32_t eip;
-    uint32_t cs;
-    uint32_t eflags;
-    uint32_t useresp;
-    uint32_t ss;
-};
 
 extern uint32_t isr_stub_table[];
 extern void pit_tick(void);
@@ -103,28 +82,29 @@ void interrupts_enable(void) {
     __asm__ volatile ("sti");
 }
 
-void interrupt_handler(interrupt_frame_t* frame) {
+uint32_t interrupt_handler(interrupt_frame_t* frame) {
     if (frame->int_no == 32) {        /* IRQ0 — timer */
         pit_tick();
+        uint32_t next_esp = scheduler_on_timer_interrupt(frame);
         pic_send_eoi(0);
-        return;
+        return next_esp;
     }
 
     if (frame->int_no == 33) {        /* IRQ1 — keyboard */
         keyboard_irq_handler();
         pic_send_eoi(1);
-        return;
+        return 0;
     }
 
     if (frame->int_no == 44) {        /* IRQ12 — mouse */
         mouse_irq_handler();
         pic_send_eoi(12);
-        return;
+        return 0;
     }
 
     if (frame->int_no >= 32 && frame->int_no < 48) {
         pic_send_eoi((uint8_t)(frame->int_no - 32));
-        return;
+        return 0;
     }
 
     /* In mode 13h, VGA text buffer (0xB8000) is invisible. Write directly

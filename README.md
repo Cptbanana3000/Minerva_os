@@ -8,7 +8,7 @@ output, PS/2 keyboard input, and a simple shell.
 - `boot.asm`         — Boot sector. Loads the kernel, switches to 32-bit protected mode.
 - `kernel_entry.asm` — Tiny stub that calls into the C kernel.
 - `kernel.c`         — The kernel: VGA driver, keyboard driver, shell.
-- `linker.ld`        — Linker script (loads kernel at 0x1000).
+- `linker.ld`        — Linker script (loads kernel at 0x8000).
 - `Makefile`         — Build script.
 
 ## How to run on Windows 11

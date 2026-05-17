@@ -82,7 +82,7 @@ interrupts/isr.o: interrupts/isr.asm
 
 kernel.bin: kernel_entry.o interrupts/isr.o libc/string.o drivers/vga.o drivers/keyboard.o drivers/serial.o drivers/graphics.o drivers/window.o drivers/terminal.o drivers/desktop.o drivers/term_window.o drivers/ata.o fs/fat32.o kernel/scheduler.o kernel/switch.o memory/allocator.o memory/pmm.o memory/paging.o interrupts/interrupts.o interrupts/pit.o kernel.o linker.ld drivers/mouse.o
 	$(LD) $(LDFLAGS) -o kernel.bin kernel_entry.o interrupts/isr.o libc/string.o drivers/vga.o drivers/keyboard.o drivers/serial.o drivers/graphics.o drivers/window.o drivers/terminal.o drivers/desktop.o drivers/term_window.o drivers/ata.o fs/fat32.o kernel/scheduler.o kernel/switch.o memory/allocator.o memory/pmm.o memory/paging.o interrupts/interrupts.o interrupts/pit.o kernel.o drivers/mouse.o
-	@test $$(wc -c < kernel.bin) -le 27648 || { echo "kernel.bin too large for bootloader load window"; exit 1; }
+	@test $$(wc -c < kernel.bin) -le 131072 || { echo "kernel.bin too large for bootloader load window"; exit 1; }
 
 os-image.bin: boot.bin kernel.bin
 	cat boot.bin kernel.bin > os-image.bin
