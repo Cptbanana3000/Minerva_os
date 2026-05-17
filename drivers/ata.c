@@ -16,6 +16,15 @@
 #define ATA_STATUS_BSY  0x80
 
 #define ATA_CMD_READ    0x20
+#define ATA_CMD_WRITE   0x30
+#define ATA_CMD_FLUSH   0xE7
+
+static void ata_io_delay(void) {
+    inb(ATA_STATUS);
+    inb(ATA_STATUS);
+    inb(ATA_STATUS);
+    inb(ATA_STATUS);
+}
 
 static int ata_wait_ready(void) {
     for (uint32_t i = 0; i < 100000; i++) {
@@ -55,4 +64,27 @@ int ata_read_sector(uint32_t lba, void *buffer) {
     }
 
     return 1;
+}
+
+int ata_write_sector(uint32_t lba, const void *buffer) {
+    if (!buffer || lba >= 0x10000000u) return 0;
+    if (!ata_wait_ready()) return 0;
+
+    outb(ATA_DRIVE, (uint8_t)(0xE0 | ((lba >> 24) & 0x0F)));
+    outb(ATA_SECCOUNT, 1);
+    outb(ATA_LBA0, (uint8_t)(lba & 0xFF));
+    outb(ATA_LBA1, (uint8_t)((lba >> 8) & 0xFF));
+    outb(ATA_LBA2, (uint8_t)((lba >> 16) & 0xFF));
+    outb(ATA_COMMAND, ATA_CMD_WRITE);
+
+    if (!ata_wait_drq()) return 0;
+
+    const uint16_t *src = (const uint16_t*)buffer;
+    for (uint32_t i = 0; i < 256; i++) {
+        outw(ATA_DATA, src[i]);
+    }
+
+    ata_io_delay();
+    outb(ATA_COMMAND, ATA_CMD_FLUSH);
+    return ata_wait_ready();
 }

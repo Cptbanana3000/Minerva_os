@@ -75,7 +75,7 @@ static void tw_exec(term_window_t *t) {
     if (strcmp(cmd, "help") == 0) {
         term_window_print(t, "help clear about\n");
         term_window_print(t, "echo meminfo ls cat\n");
-        term_window_print(t, "reboot\n");
+        term_window_print(t, "touch write reboot\n");
     } else if (strcmp(cmd, "clear") == 0) {
         memset(t->buf, 0, sizeof(t->buf));
         t->cur_col = 0;
@@ -115,6 +115,26 @@ static void tw_exec(term_window_t *t) {
             if (size == 0 || file_buffer[size - 1] != '\n') {
                 term_window_putc(t, '\n');
             }
+        }
+    } else if (starts_with(cmd, "touch ")) {
+        const char *name = cmd + 6;
+        if (!fs_is_ready()) {
+            term_window_print(t, "No filesystem\n");
+        } else if (!fs_create(name)) {
+            term_window_print(t, "touch failed\n");
+        }
+    } else if (starts_with(cmd, "write ")) {
+        char *name = t->input + 6;
+        char *text = name;
+        while (*text && *text != ' ') text++;
+        if (*text == ' ') {
+            *text++ = 0;
+        }
+
+        if (!fs_is_ready()) {
+            term_window_print(t, "No filesystem\n");
+        } else if (!*name || !*text || !fs_write_file(name, (const uint8_t*)text, strlen(text))) {
+            term_window_print(t, "write failed\n");
         }
     } else if (strcmp(cmd, "reboot") == 0) {
         while (inb(0x64) & 0x02) {}

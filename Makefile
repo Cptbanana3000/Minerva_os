@@ -5,7 +5,7 @@ CC      = gcc
 LD      = ld
 ASM     = nasm
 
-CFLAGS  = -m32 -ffreestanding -fno-pie -fno-stack-protector -nostdlib -Wall -Wextra -c
+CFLAGS  = -m32 -Os -ffreestanding -fno-pie -fno-stack-protector -nostdlib -Wall -Wextra -c
 LDFLAGS = -m elf_i386 -T linker.ld --oformat binary -nostdlib
 INCLUDES = -Iinclude
 

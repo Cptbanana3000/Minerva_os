@@ -69,7 +69,10 @@
 - [ ] FAT32 write support
 - [x] VFS layer (virtual filesystem abstraction)
 - [x] Directory listing
-- [ ] File open / read / write API
+- [x] File open / read API
+- [x] Create empty FAT32 files
+- [x] Write one-cluster empty FAT32 files
+- [ ] File write API
 
 ---
 
