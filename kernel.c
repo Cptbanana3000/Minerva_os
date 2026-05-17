@@ -18,6 +18,24 @@
 static term_window_t *g_tw    = NULL;
 static window_t      *g_about = NULL;
 
+static void create_terminal(void) {
+    if (g_tw) return;
+
+    g_tw = term_window_create(50, 15);
+    if (g_tw) window_manager_add(g_tw->win);
+}
+
+static void create_about(uint8_t minimized) {
+    if (g_about) return;
+
+    g_about = window_create(10, 10, 130, 76, "About");
+    if (!g_about) return;
+
+    window_set_bg_color(g_about, graphics_rgb(200, 200, 200));
+    window_manager_add(g_about);
+    if (minimized) window_toggle_minimize(g_about);
+}
+
 /* ------------------------------------------------------------------ */
 /* Render callback — called by desktop_redraw() after window frames    */
 /* ------------------------------------------------------------------ */
@@ -40,6 +58,7 @@ static void render_all(void) {
 /* Icon callbacks                                                       */
 /* ------------------------------------------------------------------ */
 static void open_terminal(void) {
+    if (!g_tw) create_terminal();
     if (!g_tw) return;
     if (window_is_minimized(g_tw->win))
         window_toggle_minimize(g_tw->win);
@@ -47,10 +66,22 @@ static void open_terminal(void) {
 }
 
 static void open_about(void) {
+    if (!g_about) create_about(0);
     if (!g_about) return;
     if (window_is_minimized(g_about))
         window_toggle_minimize(g_about);
     window_set_focus(g_about);
+}
+
+static void window_closed(window_t *win) {
+    if (g_tw && win == g_tw->win) {
+        g_tw->win = NULL;
+        g_tw = NULL;
+    }
+
+    if (g_about == win) {
+        g_about = NULL;
+    }
 }
 
 /* ------------------------------------------------------------------ */
@@ -88,24 +119,18 @@ void kernel_main(void) {
     window_manager_init();
     STEP(5);
 
-    /* Terminal window — primary interface */
-    g_tw = term_window_create(50, 15);
+    /* Terminal starts closed; the desktop icon launches it. */
     STEP(6);
-    if (g_tw) window_manager_add(g_tw->win);
 
     /* About window — starts minimized, opened via icon */
-    g_about = window_create(10, 10, 130, 76, "About");
+    create_about(1);
     STEP(7);
-    if (g_about) {
-        window_set_bg_color(g_about, graphics_rgb(200, 200, 200));
-        window_manager_add(g_about);
-        window_toggle_minimize(g_about);
-    }
 
     if (g_tw) window_set_focus(g_tw->win);
 
     /* Register render callback so window content is drawn each frame */
     desktop_set_render_cb(render_all);
+    desktop_set_close_cb(window_closed);
 
     /* Desktop icons */
     desktop_add_icon(4,  8, "Term", 10, open_terminal);  /* bright green */

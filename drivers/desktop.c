@@ -35,6 +35,7 @@ static int32_t        drag_off_x = 0;
 static int32_t        drag_off_y = 0;
 static uint8_t        prev_btns  = 0;
 static void         (*render_cb)(void) = NULL;
+static void         (*close_cb)(window_t *win) = NULL;
 
 /* ------------------------------------------------------------------ */
 /* Helpers                                                              */
@@ -81,6 +82,7 @@ static int window_click(int32_t mx, int32_t my) {
         /* Close button */
         if (in_rect(mx, my, wx + ww - BTN_W, wy, BTN_W, TITLEBAR_HEIGHT)) {
             if (drag_win == w) drag_win = NULL;
+            if (close_cb) close_cb(w);
             window_destroy(w);
             return 1;
         }
@@ -110,6 +112,10 @@ void desktop_set_render_cb(void (*cb)(void)) {
     render_cb = cb;
 }
 
+void desktop_set_close_cb(void (*cb)(window_t *win)) {
+    close_cb = cb;
+}
+
 void desktop_add_icon(int32_t x, int32_t y, const char *label,
                       uint32_t color, void (*on_click)(void)) {
     if (icon_count >= MAX_ICONS) return;
@@ -128,6 +134,7 @@ void desktop_init(void) {
     prev_btns  = 0;
     icon_count = 0;
     render_cb  = NULL;
+    close_cb   = NULL;
 }
 
 int desktop_process(void) {

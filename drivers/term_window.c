@@ -108,6 +108,8 @@ void term_window_handle_key(term_window_t *t, char c) {
 }
 
 void term_window_render(term_window_t *t) {
+    if (!t || !t->win || window_is_minimized(t->win)) return;
+
     /* Black background — window_render() already filled it, but clear
        the client area so old chars don't ghost when the cursor moves back */
     window_clear(t->win, 0);
