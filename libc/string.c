@@ -31,6 +31,19 @@ void* memset(void* destination, int value, size_t count) {
     return destination;
 }
 
+int memcmp(const void* left, const void* right, size_t count) {
+    const unsigned char* l = (const unsigned char*)left;
+    const unsigned char* r = (const unsigned char*)right;
+
+    for (size_t index = 0; index < count; index++) {
+        if (l[index] != r[index]) {
+            return l[index] - r[index];
+        }
+    }
+
+    return 0;
+}
+
 char* strcpy(char* destination, const char* source) {
     char* result = destination;
 

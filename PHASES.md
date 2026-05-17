@@ -61,14 +61,14 @@
 
 ---
 
-## Phase 4 — Filesystem
+## Phase 4 — Filesystem `IN PROGRESS`
 
 > Persistent storage and file access.
 
-- [ ] FAT32 read support
+- [x] FAT32 read support
 - [ ] FAT32 write support
-- [ ] VFS layer (virtual filesystem abstraction)
-- [ ] Directory listing
+- [x] VFS layer (virtual filesystem abstraction)
+- [x] Directory listing
 - [ ] File open / read / write API
 
 ---
@@ -135,7 +135,7 @@
 | 1 | Stabilize + Input | ✅ Complete |
 | 2 | Memory | ✅ Complete |
 | 3 | Desktop GUI | ✅ Complete |
-| 4 | Filesystem | ⬜ Not started |
+| 4 | Filesystem | 🚧 In progress |
 | 5 | Multitasking | ⬜ Not started |
 | 6 | Applications | ⬜ Not started |
 | 7 | Networking | ⬜ Not started |

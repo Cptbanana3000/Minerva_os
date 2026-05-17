@@ -6,8 +6,10 @@
 #include "serial.h"
 #include "pmm.h"
 #include "io.h"
+#include "fs.h"
 
 static term_window_t g_tw;
+static uint8_t file_buffer[512];
 
 static void tw_scroll(term_window_t *t) {
     for (int r = 0; r < TWIN_ROWS - 1; r++)
@@ -50,6 +52,21 @@ static void tw_print_num(term_window_t *t, uint32_t n) {
     term_window_print(t, tmp + i);
 }
 
+static int starts_with(const char *s, const char *prefix) {
+    while (*prefix) {
+        if (*s++ != *prefix++) return 0;
+    }
+    return 1;
+}
+
+static void tw_ls_entry(const char *name, uint32_t size, void *ctx) {
+    term_window_t *t = (term_window_t*)ctx;
+    term_window_print(t, name);
+    term_window_putc(t, ' ');
+    tw_print_num(t, size);
+    term_window_putc(t, '\n');
+}
+
 static void tw_exec(term_window_t *t) {
     const char *cmd = t->input;
     serial_write(cmd);
@@ -57,7 +74,8 @@ static void tw_exec(term_window_t *t) {
 
     if (strcmp(cmd, "help") == 0) {
         term_window_print(t, "help clear about\n");
-        term_window_print(t, "echo meminfo reboot\n");
+        term_window_print(t, "echo meminfo ls cat\n");
+        term_window_print(t, "reboot\n");
     } else if (strcmp(cmd, "clear") == 0) {
         memset(t->buf, 0, sizeof(t->buf));
         t->cur_col = 0;
@@ -78,6 +96,26 @@ static void tw_exec(term_window_t *t) {
         term_window_print(t, "Free:");
         tw_print_num(t, pmm_free_pages() * 4);
         term_window_print(t, "K\n");
+    } else if (strcmp(cmd, "ls") == 0) {
+        if (!fs_is_ready()) {
+            term_window_print(t, "No filesystem\n");
+        } else if (!fs_list_root(tw_ls_entry, t)) {
+            term_window_print(t, "ls failed\n");
+        }
+    } else if (starts_with(cmd, "cat ")) {
+        const char *name = cmd + 4;
+        uint32_t size = 0;
+        if (!fs_is_ready()) {
+            term_window_print(t, "No filesystem\n");
+        } else if (!fs_read_file(name, file_buffer, sizeof(file_buffer) - 1, &size)) {
+            term_window_print(t, "cat failed\n");
+        } else {
+            file_buffer[size] = 0;
+            term_window_print(t, (const char*)file_buffer);
+            if (size == 0 || file_buffer[size - 1] != '\n') {
+                term_window_putc(t, '\n');
+            }
+        }
     } else if (strcmp(cmd, "reboot") == 0) {
         while (inb(0x64) & 0x02) {}
         outb(0x64, 0xFE);

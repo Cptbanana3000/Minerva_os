@@ -11,6 +11,7 @@
 #include "window.h"
 #include "desktop.h"
 #include "term_window.h"
+#include "fs.h"
 
 /* ------------------------------------------------------------------ */
 /* Globals                                                              */
@@ -94,6 +95,11 @@ void kernel_main(void) {
     heap_init();
     serial_init();
     serial_write("MinervaOS booting...\n");
+    if (fs_init()) {
+        serial_write("FAT32 filesystem mounted\n");
+    } else {
+        serial_write("No FAT32 filesystem\n");
+    }
 
     graphics_init();
 
