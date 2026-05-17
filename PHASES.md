@@ -61,18 +61,25 @@
 
 ---
 
-## Phase 4 — Filesystem `IN PROGRESS`
+## Phase 4 — Filesystem `COMPLETE`
 
 > Persistent storage and file access.
 
 - [x] FAT32 read support
-- [ ] FAT32 write support
+- [x] FAT32 write support
 - [x] VFS layer (virtual filesystem abstraction)
 - [x] Directory listing
 - [x] File open / read API
 - [x] Create empty FAT32 files
 - [x] Write one-cluster empty FAT32 files
-- [ ] File write API
+- [x] Overwrite one-cluster FAT32 files
+- [x] Append within one-cluster FAT32 files
+- [x] Extend one-cluster append to two clusters
+- [x] General multi-cluster append
+- [x] Truncate files and free cluster chains
+- [x] File write API (create / truncate / append modes)
+- [x] File delete API
+- [x] File rename API
 
 ---
 
@@ -138,7 +145,7 @@
 | 1 | Stabilize + Input | ✅ Complete |
 | 2 | Memory | ✅ Complete |
 | 3 | Desktop GUI | ✅ Complete |
-| 4 | Filesystem | 🚧 In progress |
+| 4 | Filesystem | ✅ Complete |
 | 5 | Multitasking | ⬜ Not started |
 | 6 | Applications | ⬜ Not started |
 | 7 | Networking | ⬜ Not started |

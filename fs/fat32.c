@@ -279,6 +279,52 @@ static int find_free_cluster(uint32_t *out_cluster) {
     return 0;
 }
 
+static int free_cluster_chain(uint32_t first_cluster) {
+    uint32_t total = total_sectors();
+    if (total <= data_start_lba) return 0;
+
+    uint32_t data_sectors = total - data_start_lba;
+    uint32_t max_cluster = data_sectors / bpb.sectors_per_cluster + 2;
+    uint32_t visited = 0;
+    uint32_t cluster = first_cluster;
+
+    while (cluster >= 2 && cluster < FAT32_EOC) {
+        if (cluster >= max_cluster || visited++ >= max_cluster) return 0;
+
+        uint32_t next = 0;
+        if (!read_fat_entry(cluster, &next)) return 0;
+        if (!write_fat_entry(cluster, 0)) return 0;
+        cluster = next;
+    }
+
+    return 1;
+}
+
+static int cluster_is_single(uint32_t cluster) {
+    uint32_t next = 0;
+    if (cluster < 2 || !read_fat_entry(cluster, &next)) return 0;
+    return next >= FAT32_EOC;
+}
+
+static int write_buffer_to_cluster(uint32_t cluster, const uint8_t *buffer, uint32_t size) {
+    uint32_t written = 0;
+
+    for (uint8_t s = 0; s < bpb.sectors_per_cluster; s++) {
+        memset(sector, 0, SECTOR_SIZE);
+
+        uint32_t remaining = size - written;
+        uint32_t to_copy = remaining > SECTOR_SIZE ? SECTOR_SIZE : remaining;
+        if (to_copy > 0) {
+            memcpy(sector, buffer + written, to_copy);
+            written += to_copy;
+        }
+
+        if (!ata_write_sector(cluster_to_lba(cluster) + s, sector)) return 0;
+    }
+
+    return 1;
+}
+
 int fs_init(void) {
     mounted = 0;
     if (!ata_read_sector(0, sector)) return 0;
@@ -461,32 +507,193 @@ int fs_write_file(const char *name, const uint8_t *buffer, uint32_t size) {
     uint32_t dir_index = 0;
     if (!find_root_entry_at(name, &entry, &dir_lba, &dir_index)) return 0;
     if (entry.attr & FAT_ATTR_DIRECTORY) return 0;
-    if (rd32(&entry.size) != 0 || first_cluster(&entry) != 0) return 0;
     if (size == 0) return 1;
 
-    uint32_t new_cluster = 0;
-    if (!find_free_cluster(&new_cluster)) return 0;
-
-    uint32_t written = 0;
-    for (uint8_t s = 0; s < bpb.sectors_per_cluster; s++) {
-        memset(sector, 0, SECTOR_SIZE);
-
-        uint32_t remaining = size - written;
-        uint32_t to_copy = remaining > SECTOR_SIZE ? SECTOR_SIZE : remaining;
-        if (to_copy > 0) {
-            memcpy(sector, buffer + written, to_copy);
-            written += to_copy;
-        }
-
-        if (!ata_write_sector(cluster_to_lba(new_cluster) + s, sector)) return 0;
+    uint32_t target_cluster = first_cluster(&entry);
+    if (target_cluster == 0) {
+        if (rd32(&entry.size) != 0 || !find_free_cluster(&target_cluster)) return 0;
+        if (!write_buffer_to_cluster(target_cluster, buffer, size)) return 0;
+        if (!write_fat_entry(target_cluster, FAT32_EOC_MARK)) return 0;
+    } else {
+        if (!cluster_is_single(target_cluster)) return 0;
+        if (!write_buffer_to_cluster(target_cluster, buffer, size)) return 0;
     }
-
-    if (!write_fat_entry(new_cluster, FAT32_EOC_MARK)) return 0;
 
     if (!ata_read_sector(dir_lba, sector)) return 0;
     fat32_dirent_t *entries = (fat32_dirent_t*)sector;
-    wr16(&entries[dir_index].first_cluster_high, (uint16_t)(new_cluster >> 16));
-    wr16(&entries[dir_index].first_cluster_low, (uint16_t)(new_cluster & 0xFFFF));
+    wr16(&entries[dir_index].first_cluster_high, (uint16_t)(target_cluster >> 16));
+    wr16(&entries[dir_index].first_cluster_low, (uint16_t)(target_cluster & 0xFFFF));
     wr32(&entries[dir_index].size, size);
+    return ata_write_sector(dir_lba, sector);
+}
+
+int fs_append_file(const char *name, const uint8_t *buffer, uint32_t size) {
+    if (!mounted || !name || (!buffer && size > 0)) return 0;
+    if (size == 0) return 1;
+
+    char short_name[11];
+    if (!make_short_name_checked(name, short_name)) return 0;
+
+    fat32_dirent_t entry;
+    uint32_t dir_lba = 0;
+    uint32_t dir_index = 0;
+    if (!find_root_entry_at(name, &entry, &dir_lba, &dir_index)) return 0;
+    if (entry.attr & FAT_ATTR_DIRECTORY) return 0;
+
+    uint32_t cluster = first_cluster(&entry);
+    uint32_t old_size = rd32(&entry.size);
+    uint32_t bytes_per_cluster = (uint32_t)bpb.sectors_per_cluster * SECTOR_SIZE;
+    uint32_t new_size = old_size + size;
+    if (cluster < 2 || new_size < old_size) return 0;
+
+    uint32_t offset_in_cluster = old_size;
+    while (offset_in_cluster > bytes_per_cluster) {
+        uint32_t next = next_cluster(cluster);
+        if (next >= FAT32_EOC) return 0;
+        cluster = next;
+        offset_in_cluster -= bytes_per_cluster;
+    }
+
+    uint32_t tail_next = 0;
+    if (!read_fat_entry(cluster, &tail_next) || tail_next < FAT32_EOC) return 0;
+
+    uint32_t written = 0;
+    while (written < size && offset_in_cluster < bytes_per_cluster) {
+        uint8_t sector_index = (uint8_t)(offset_in_cluster / SECTOR_SIZE);
+        uint32_t byte_offset = offset_in_cluster % SECTOR_SIZE;
+        uint32_t lba = cluster_to_lba(cluster) + sector_index;
+
+        if (!ata_read_sector(lba, sector)) return 0;
+
+        uint32_t available = SECTOR_SIZE - byte_offset;
+        uint32_t remaining = size - written;
+        uint32_t to_copy = available < remaining ? available : remaining;
+        memcpy(sector + byte_offset, buffer + written, to_copy);
+        if (!ata_write_sector(lba, sector)) return 0;
+
+        written += to_copy;
+        offset_in_cluster += to_copy;
+    }
+
+    while (written < size) {
+        uint32_t new_cluster = 0;
+        if (!find_free_cluster(&new_cluster)) return 0;
+
+        uint32_t remaining = size - written;
+        uint32_t to_copy = remaining > bytes_per_cluster ? bytes_per_cluster : remaining;
+        if (!write_buffer_to_cluster(new_cluster, buffer + written, to_copy)) return 0;
+        if (!write_fat_entry(new_cluster, FAT32_EOC_MARK)) return 0;
+        if (!write_fat_entry(cluster, new_cluster)) return 0;
+
+        cluster = new_cluster;
+        written += to_copy;
+    }
+
+    if (!ata_read_sector(dir_lba, sector)) return 0;
+    fat32_dirent_t *entries = (fat32_dirent_t*)sector;
+    wr32(&entries[dir_index].size, new_size);
+    return ata_write_sector(dir_lba, sector);
+}
+
+int fs_truncate_file(const char *name) {
+    if (!mounted || !name) return 0;
+
+    char short_name[11];
+    if (!make_short_name_checked(name, short_name)) return 0;
+
+    fat32_dirent_t entry;
+    uint32_t dir_lba = 0;
+    uint32_t dir_index = 0;
+    if (!find_root_entry_at(name, &entry, &dir_lba, &dir_index)) return 0;
+    if (entry.attr & FAT_ATTR_DIRECTORY) return 0;
+
+    uint32_t cluster = first_cluster(&entry);
+    if (cluster >= 2 && !free_cluster_chain(cluster)) return 0;
+
+    if (!ata_read_sector(dir_lba, sector)) return 0;
+    fat32_dirent_t *entries = (fat32_dirent_t*)sector;
+    wr16(&entries[dir_index].first_cluster_high, 0);
+    wr16(&entries[dir_index].first_cluster_low, 0);
+    wr32(&entries[dir_index].size, 0);
+    return ata_write_sector(dir_lba, sector);
+}
+
+int fs_write(const char *name, const uint8_t *buffer, uint32_t size, uint32_t flags) {
+    if (!mounted || !name || (!buffer && size > 0)) return 0;
+    if ((flags & FS_WRITE_APPEND) && (flags & FS_WRITE_TRUNCATE)) return 0;
+
+    char short_name[11];
+    if (!make_short_name_checked(name, short_name)) return 0;
+
+    fat32_dirent_t entry;
+    int exists = find_root_entry_at(name, &entry, 0, 0);
+    if (exists && (entry.attr & FAT_ATTR_DIRECTORY)) return 0;
+
+    if (exists && (flags & FS_WRITE_EXCL)) return 0;
+    if (!exists) {
+        if (!(flags & FS_WRITE_CREATE)) return 0;
+        if (!fs_create(name)) return 0;
+    }
+
+    if (flags & FS_WRITE_TRUNCATE) {
+        if (!fs_truncate_file(name)) return 0;
+        if (size == 0) return 1;
+        return fs_write_file(name, buffer, size);
+    }
+
+    if (flags & FS_WRITE_APPEND) {
+        if (size == 0) return 1;
+
+        fat32_dirent_t current;
+        if (!find_root_entry_at(name, &current, 0, 0)) return 0;
+        if (first_cluster(&current) == 0) {
+            return fs_write_file(name, buffer, size);
+        }
+        return fs_append_file(name, buffer, size);
+    }
+
+    return fs_write_file(name, buffer, size);
+}
+
+int fs_delete_file(const char *name) {
+    if (!mounted || !name) return 0;
+
+    char short_name[11];
+    if (!make_short_name_checked(name, short_name)) return 0;
+
+    fat32_dirent_t entry;
+    uint32_t dir_lba = 0;
+    uint32_t dir_index = 0;
+    if (!find_root_entry_at(name, &entry, &dir_lba, &dir_index)) return 0;
+    if (entry.attr & FAT_ATTR_DIRECTORY) return 0;
+
+    uint32_t cluster = first_cluster(&entry);
+    if (cluster >= 2 && !free_cluster_chain(cluster)) return 0;
+
+    if (!ata_read_sector(dir_lba, sector)) return 0;
+    fat32_dirent_t *entries = (fat32_dirent_t*)sector;
+    memset(&entries[dir_index], 0, sizeof(fat32_dirent_t));
+    entries[dir_index].name[0] = (char)0xE5;
+    return ata_write_sector(dir_lba, sector);
+}
+
+int fs_rename_file(const char *old_name, const char *new_name) {
+    if (!mounted || !old_name || !new_name) return 0;
+
+    char new_short_name[11];
+    if (!make_short_name_checked(new_name, new_short_name)) return 0;
+
+    fat32_dirent_t entry;
+    uint32_t dir_lba = 0;
+    uint32_t dir_index = 0;
+    if (!find_root_entry_at(old_name, &entry, &dir_lba, &dir_index)) return 0;
+    if (entry.attr & FAT_ATTR_DIRECTORY) return 0;
+
+    fat32_dirent_t existing;
+    if (find_root_entry(new_name, &existing)) return 0;
+
+    if (!ata_read_sector(dir_lba, sector)) return 0;
+    fat32_dirent_t *entries = (fat32_dirent_t*)sector;
+    memcpy(entries[dir_index].name, new_short_name, 11);
     return ata_write_sector(dir_lba, sector);
 }

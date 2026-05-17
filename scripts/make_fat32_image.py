@@ -12,6 +12,8 @@ ROOT_CLUSTER = 2
 FILES = [
     ("README.TXT", b"Welcome to MinervaOS FAT32.\nTry: ls and cat ABOUT.TXT\n"),
     ("ABOUT.TXT", b"Phase 4 has begun.\nThis file was loaded from a FAT32 disk image.\n"),
+    ("NEAR.TXT", b"A" * 511),
+    ("NEAR2.TXT", b"B" * 1023),
 ]
 
 
@@ -89,12 +91,25 @@ def main():
     next_cluster = 3
     data_start = RESERVED_SECTORS + FAT_SECTORS
     for index, (name, data) in enumerate(FILES):
-        cluster = next_cluster
-        next_cluster += 1
-        put32(fat, cluster * 4, 0x0FFFFFFF)
-        write_file_entry(image, index, name, cluster, data)
-        data_offset = (data_start + (cluster - 2) * SECTORS_PER_CLUSTER) * SECTOR_SIZE
-        image[data_offset:data_offset + len(data)] = data
+        cluster_size = SECTORS_PER_CLUSTER * SECTOR_SIZE
+        cluster_count = max(1, (len(data) + cluster_size - 1) // cluster_size)
+        first_cluster = next_cluster
+
+        for chunk_index in range(cluster_count):
+            cluster = next_cluster
+            next_cluster += 1
+
+            next_value = 0x0FFFFFFF
+            if chunk_index + 1 < cluster_count:
+                next_value = cluster + 1
+            put32(fat, cluster * 4, next_value)
+
+            data_offset = (data_start + (cluster - 2) * SECTORS_PER_CLUSTER) * SECTOR_SIZE
+            chunk_start = chunk_index * cluster_size
+            chunk = data[chunk_start:chunk_start + cluster_size]
+            image[data_offset:data_offset + len(chunk)] = chunk
+
+        write_file_entry(image, index, name, first_cluster, data)
 
     image[fat_offset:fat_offset + FAT_SECTORS * SECTOR_SIZE] = fat
 

@@ -75,7 +75,9 @@ static void tw_exec(term_window_t *t) {
     if (strcmp(cmd, "help") == 0) {
         term_window_print(t, "help clear about\n");
         term_window_print(t, "echo meminfo ls cat\n");
-        term_window_print(t, "touch write reboot\n");
+        term_window_print(t, "touch write append\n");
+        term_window_print(t, "truncate delete rename\n");
+        term_window_print(t, "reboot\n");
     } else if (strcmp(cmd, "clear") == 0) {
         memset(t->buf, 0, sizeof(t->buf));
         t->cur_col = 0;
@@ -104,15 +106,28 @@ static void tw_exec(term_window_t *t) {
         }
     } else if (starts_with(cmd, "cat ")) {
         const char *name = cmd + 4;
+        fs_file_t file;
         uint32_t size = 0;
+        uint32_t total = 0;
+        char last = 0;
         if (!fs_is_ready()) {
             term_window_print(t, "No filesystem\n");
-        } else if (!fs_read_file(name, file_buffer, sizeof(file_buffer) - 1, &size)) {
+        } else if (!fs_open(name, &file)) {
             term_window_print(t, "cat failed\n");
         } else {
-            file_buffer[size] = 0;
-            term_window_print(t, (const char*)file_buffer);
-            if (size == 0 || file_buffer[size - 1] != '\n') {
+            size = fs_file_size(&file);
+            while (total < size) {
+                uint32_t got = fs_read(&file, file_buffer, sizeof(file_buffer) - 1);
+                if (got == 0) break;
+                file_buffer[got] = 0;
+                last = (char)file_buffer[got - 1];
+                total += got;
+                term_window_print(t, (const char*)file_buffer);
+            }
+            fs_close(&file);
+            if (total != size) {
+                term_window_print(t, "cat failed\n");
+            } else if (size == 0 || last != '\n') {
                 term_window_putc(t, '\n');
             }
         }
@@ -133,8 +148,51 @@ static void tw_exec(term_window_t *t) {
 
         if (!fs_is_ready()) {
             term_window_print(t, "No filesystem\n");
-        } else if (!*name || !*text || !fs_write_file(name, (const uint8_t*)text, strlen(text))) {
+        } else if (!*name || !*text ||
+                   !fs_write(name, (const uint8_t*)text, strlen(text),
+                             FS_WRITE_CREATE | FS_WRITE_TRUNCATE)) {
             term_window_print(t, "write failed\n");
+        }
+    } else if (starts_with(cmd, "append ")) {
+        char *name = t->input + 7;
+        char *text = name;
+        while (*text && *text != ' ') text++;
+        if (*text == ' ') {
+            *text++ = 0;
+        }
+
+        if (!fs_is_ready()) {
+            term_window_print(t, "No filesystem\n");
+        } else if (!*name || !*text ||
+                   !fs_write(name, (const uint8_t*)text, strlen(text), FS_WRITE_APPEND)) {
+            term_window_print(t, "append failed\n");
+        }
+    } else if (starts_with(cmd, "truncate ")) {
+        const char *name = cmd + 9;
+        if (!fs_is_ready()) {
+            term_window_print(t, "No filesystem\n");
+        } else if (!fs_truncate_file(name)) {
+            term_window_print(t, "truncate failed\n");
+        }
+    } else if (starts_with(cmd, "delete ")) {
+        const char *name = cmd + 7;
+        if (!fs_is_ready()) {
+            term_window_print(t, "No filesystem\n");
+        } else if (!fs_delete_file(name)) {
+            term_window_print(t, "delete failed\n");
+        }
+    } else if (starts_with(cmd, "rename ")) {
+        char *old_name = t->input + 7;
+        char *new_name = old_name;
+        while (*new_name && *new_name != ' ') new_name++;
+        if (*new_name == ' ') {
+            *new_name++ = 0;
+        }
+
+        if (!fs_is_ready()) {
+            term_window_print(t, "No filesystem\n");
+        } else if (!*old_name || !*new_name || !fs_rename_file(old_name, new_name)) {
+            term_window_print(t, "rename failed\n");
         }
     } else if (strcmp(cmd, "reboot") == 0) {
         while (inb(0x64) & 0x02) {}
