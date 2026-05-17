@@ -476,8 +476,24 @@ cat OLD.TXT
 
 ## Next Likely Step
 
-Phase 4 is complete. The next roadmap phase is Phase 5: multitasking.
+Phase 4 is complete. Phase 5 has begun with a non-invasive scheduler skeleton:
 
-The first safe Phase 5 slice is likely a kernel-side process/task table with a
-single registered kernel task, followed by a round-robin scheduler that can
-switch between kernel tasks before attempting ring 3 userland.
+- `scheduler_init()` sets up an in-kernel task table.
+- `scheduler_create_kernel_task()` registers kernel tasks.
+- The PIT calls `scheduler_tick()` at 100 Hz.
+- The main loop calls `scheduler_poll()` to perform cooperative round-robin
+  dispatch.
+- Each registered kernel task now has its own small kernel stack.
+- `scheduler_context_switch()` saves/restores ESP and callee-saved registers.
+- Tasks run one step on their own stack, then yield back to the kernel loop.
+- The terminal `tasks` command lists task IDs, names, run counts, and scheduler
+  switch count.
+- `tasks` also shows timer schedule requests, proving IRQ0 is driving the
+  scheduler decision point before true interrupt-frame switching is attempted.
+
+This is still cooperative rather than preemptive, but it now performs real
+kernel-stack switching. Timer interrupts request scheduling; the main loop still
+performs the actual switch safely outside the IRQ handler.
+
+The next safe Phase 5 slice is moving the switch point into the timer interrupt
+path so round-robin scheduling becomes preemptive.

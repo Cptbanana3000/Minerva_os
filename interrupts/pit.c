@@ -2,6 +2,7 @@
 
 #include "interrupts.h"
 #include "io.h"
+#include "scheduler.h"
 
 static volatile uint32_t timer_ticks = 0;
 
@@ -23,4 +24,5 @@ void pit_init(uint32_t frequency_hz) {
 
 void pit_tick(void) {
     timer_ticks++;
+    scheduler_tick();
 }

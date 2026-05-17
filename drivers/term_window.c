@@ -7,6 +7,7 @@
 #include "pmm.h"
 #include "io.h"
 #include "fs.h"
+#include "scheduler.h"
 
 static term_window_t g_tw;
 static uint8_t file_buffer[512];
@@ -67,6 +68,16 @@ static void tw_ls_entry(const char *name, uint32_t size, void *ctx) {
     term_window_putc(t, '\n');
 }
 
+static void tw_task_entry(uint32_t id, const char *name, uint32_t runs, void *ctx) {
+    term_window_t *t = (term_window_t*)ctx;
+    tw_print_num(t, id);
+    term_window_putc(t, ' ');
+    term_window_print(t, name);
+    term_window_putc(t, ' ');
+    tw_print_num(t, runs);
+    term_window_putc(t, '\n');
+}
+
 static void tw_exec(term_window_t *t) {
     const char *cmd = t->input;
     serial_write(cmd);
@@ -74,10 +85,10 @@ static void tw_exec(term_window_t *t) {
 
     if (strcmp(cmd, "help") == 0) {
         term_window_print(t, "help clear about\n");
-        term_window_print(t, "echo meminfo ls cat\n");
-        term_window_print(t, "touch write append\n");
-        term_window_print(t, "truncate delete rename\n");
-        term_window_print(t, "reboot\n");
+        term_window_print(t, "echo meminfo tasks\n");
+        term_window_print(t, "ls cat touch write\n");
+        term_window_print(t, "append truncate delete\n");
+        term_window_print(t, "rename reboot\n");
     } else if (strcmp(cmd, "clear") == 0) {
         memset(t->buf, 0, sizeof(t->buf));
         t->cur_col = 0;
@@ -98,6 +109,14 @@ static void tw_exec(term_window_t *t) {
         term_window_print(t, "Free:");
         tw_print_num(t, pmm_free_pages() * 4);
         term_window_print(t, "K\n");
+    } else if (strcmp(cmd, "tasks") == 0) {
+        term_window_print(t, "Switches:");
+        tw_print_num(t, scheduler_switch_count());
+        term_window_putc(t, '\n');
+        term_window_print(t, "TimerReq:");
+        tw_print_num(t, scheduler_timer_request_count());
+        term_window_putc(t, '\n');
+        scheduler_list(tw_task_entry, t);
     } else if (strcmp(cmd, "ls") == 0) {
         if (!fs_is_ready()) {
             term_window_print(t, "No filesystem\n");

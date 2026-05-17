@@ -83,11 +83,17 @@
 
 ---
 
-## Phase 5 — Multitasking
+## Phase 5 — Multitasking `IN PROGRESS`
 
 > Multiple processes running concurrently.
 
-- [ ] Round-robin scheduler
+- [x] Kernel task table
+- [x] PIT-driven scheduler ticks
+- [x] Cooperative round-robin scheduler skeleton
+- [x] Kernel task stacks
+- [x] Cooperative context switch (ESP save/restore)
+- [x] Timer-requested scheduling plumbing
+- [ ] Preemptive round-robin scheduler
 - [ ] Process table
 - [ ] Context switching (save/restore CPU state)
 - [ ] Ring 3 userland (privilege separation)
@@ -146,7 +152,7 @@
 | 2 | Memory | ✅ Complete |
 | 3 | Desktop GUI | ✅ Complete |
 | 4 | Filesystem | ✅ Complete |
-| 5 | Multitasking | ⬜ Not started |
+| 5 | Multitasking | 🚧 In progress |
 | 6 | Applications | ⬜ Not started |
 | 7 | Networking | ⬜ Not started |
 | 8 | Browser | ⬜ Not started |

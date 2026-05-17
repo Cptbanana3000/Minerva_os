@@ -47,11 +47,17 @@ drivers/ata.o: drivers/ata.c include/ata.h include/io.h
 drivers/desktop.o: drivers/desktop.c include/desktop.h include/graphics.h include/window.h include/mouse.h
 	$(CC) $(CFLAGS) $(INCLUDES) drivers/desktop.c -o drivers/desktop.o
 
-drivers/term_window.o: drivers/term_window.c include/term_window.h include/window.h include/graphics.h include/libc.h include/serial.h include/pmm.h include/io.h include/fs.h
+drivers/term_window.o: drivers/term_window.c include/term_window.h include/window.h include/graphics.h include/libc.h include/serial.h include/pmm.h include/io.h include/fs.h include/scheduler.h
 	$(CC) $(CFLAGS) $(INCLUDES) drivers/term_window.c -o drivers/term_window.o
 
 fs/fat32.o: fs/fat32.c include/fs.h include/ata.h include/libc.h
 	$(CC) $(CFLAGS) $(INCLUDES) fs/fat32.c -o fs/fat32.o
+
+kernel/scheduler.o: kernel/scheduler.c include/scheduler.h include/libc.h
+	$(CC) $(CFLAGS) $(INCLUDES) kernel/scheduler.c -o kernel/scheduler.o
+
+kernel/switch.o: kernel/switch.asm
+	$(ASM) -f elf32 kernel/switch.asm -o kernel/switch.o
 
 memory/allocator.o: memory/allocator.c include/memory.h
 	$(CC) $(CFLAGS) $(INCLUDES) memory/allocator.c -o memory/allocator.o
@@ -65,17 +71,17 @@ memory/paging.o: memory/paging.c include/paging.h include/pmm.h include/libc.h
 interrupts/interrupts.o: interrupts/interrupts.c include/interrupts.h include/io.h include/vga.h
 	$(CC) $(CFLAGS) $(INCLUDES) interrupts/interrupts.c -o interrupts/interrupts.o
 
-interrupts/pit.o: interrupts/pit.c include/interrupts.h include/io.h
+interrupts/pit.o: interrupts/pit.c include/interrupts.h include/io.h include/scheduler.h
 	$(CC) $(CFLAGS) $(INCLUDES) interrupts/pit.c -o interrupts/pit.o
 
-kernel.o: kernel.c include/io.h include/keyboard.h include/interrupts.h include/libc.h include/memory.h include/serial.h include/graphics.h include/window.h include/desktop.h include/term_window.h include/mouse.h include/pmm.h include/paging.h include/fs.h
+kernel.o: kernel.c include/io.h include/keyboard.h include/interrupts.h include/libc.h include/memory.h include/serial.h include/graphics.h include/window.h include/desktop.h include/term_window.h include/mouse.h include/pmm.h include/paging.h include/fs.h include/scheduler.h
 	$(CC) $(CFLAGS) $(INCLUDES) kernel.c -o kernel.o
 
 interrupts/isr.o: interrupts/isr.asm
 	$(ASM) -f elf32 interrupts/isr.asm -o interrupts/isr.o
 
-kernel.bin: kernel_entry.o interrupts/isr.o libc/string.o drivers/vga.o drivers/keyboard.o drivers/serial.o drivers/graphics.o drivers/window.o drivers/terminal.o drivers/desktop.o drivers/term_window.o drivers/ata.o fs/fat32.o memory/allocator.o memory/pmm.o memory/paging.o interrupts/interrupts.o interrupts/pit.o kernel.o linker.ld drivers/mouse.o
-	$(LD) $(LDFLAGS) -o kernel.bin kernel_entry.o interrupts/isr.o libc/string.o drivers/vga.o drivers/keyboard.o drivers/serial.o drivers/graphics.o drivers/window.o drivers/terminal.o drivers/desktop.o drivers/term_window.o drivers/ata.o fs/fat32.o memory/allocator.o memory/pmm.o memory/paging.o interrupts/interrupts.o interrupts/pit.o kernel.o drivers/mouse.o
+kernel.bin: kernel_entry.o interrupts/isr.o libc/string.o drivers/vga.o drivers/keyboard.o drivers/serial.o drivers/graphics.o drivers/window.o drivers/terminal.o drivers/desktop.o drivers/term_window.o drivers/ata.o fs/fat32.o kernel/scheduler.o kernel/switch.o memory/allocator.o memory/pmm.o memory/paging.o interrupts/interrupts.o interrupts/pit.o kernel.o linker.ld drivers/mouse.o
+	$(LD) $(LDFLAGS) -o kernel.bin kernel_entry.o interrupts/isr.o libc/string.o drivers/vga.o drivers/keyboard.o drivers/serial.o drivers/graphics.o drivers/window.o drivers/terminal.o drivers/desktop.o drivers/term_window.o drivers/ata.o fs/fat32.o kernel/scheduler.o kernel/switch.o memory/allocator.o memory/pmm.o memory/paging.o interrupts/interrupts.o interrupts/pit.o kernel.o drivers/mouse.o
 	@test $$(wc -c < kernel.bin) -le 27648 || { echo "kernel.bin too large for bootloader load window"; exit 1; }
 
 os-image.bin: boot.bin kernel.bin
@@ -92,6 +98,6 @@ run: os-image.bin fs.img
 	powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "& 'C:\Program Files\qemu\qemu-system-i386.exe' -drive file='C:\Users\joell\Downloads\os-image.bin',format=raw,if=floppy -drive file='C:\Users\joell\Downloads\minerva-fs.img',format=raw,if=ide,index=0 -boot a -no-reboot -no-shutdown"
 
 clean:
-	rm -f *.bin *.o libc/*.o drivers/*.o fs/*.o interrupts/*.o memory/*.o os-image.bin fs.img
+	rm -f *.bin *.o libc/*.o drivers/*.o fs/*.o kernel/*.o interrupts/*.o memory/*.o os-image.bin fs.img
 
 .PHONY: all run clean

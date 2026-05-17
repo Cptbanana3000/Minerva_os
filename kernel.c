@@ -12,12 +12,20 @@
 #include "desktop.h"
 #include "term_window.h"
 #include "fs.h"
+#include "scheduler.h"
 
 /* ------------------------------------------------------------------ */
 /* Globals                                                              */
 /* ------------------------------------------------------------------ */
 static term_window_t *g_tw    = NULL;
 static window_t      *g_about = NULL;
+static uint32_t g_task_a_ticks = 0;
+static uint32_t g_task_b_ticks = 0;
+
+static void demo_task(void *ctx) {
+    uint32_t *counter = (uint32_t*)ctx;
+    (*counter)++;
+}
 
 static void create_terminal(void) {
     if (g_tw) return;
@@ -94,6 +102,9 @@ void kernel_main(void) {
     paging_init();
     heap_init();
     serial_init();
+    scheduler_init();
+    scheduler_create_kernel_task("task-a", demo_task, &g_task_a_ticks);
+    scheduler_create_kernel_task("task-b", demo_task, &g_task_b_ticks);
     serial_write("MinervaOS booting...\n");
     if (fs_init()) {
         serial_write("FAT32 filesystem mounted\n");
@@ -148,6 +159,8 @@ void kernel_main(void) {
 
     /* ---- Main event loop ---- */
     while (1) {
+        scheduler_poll();
+
         if (desktop_process()) desktop_redraw();
 
         if (keyboard_has_key()) {
