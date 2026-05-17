@@ -134,6 +134,9 @@ static void tw_exec(term_window_t *t) {
         term_window_print(t, "Block:");
         tw_print_num(t, scheduler_irq_preempt_blocked_count());
         term_window_putc(t, '\n');
+        term_window_print(t, "MainCap:");
+        tw_print_num(t, scheduler_main_capture_count());
+        term_window_putc(t, '\n');
         scheduler_list(tw_task_entry, t);
     } else if (strcmp(cmd, "preempt") == 0) {
         term_window_print(t, "PMode:");

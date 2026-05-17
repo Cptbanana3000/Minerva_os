@@ -82,6 +82,25 @@ static void open_about(void) {
     window_set_focus(g_about);
 }
 
+static void desktop_main_loop(void) {
+    while (1) {
+        scheduler_poll();
+
+        if (desktop_process()) desktop_redraw();
+
+        if (keyboard_has_key()) {
+            char c = keyboard_read_key();
+            /* Route keyboard to terminal window when it is focused */
+            if (g_tw &&
+                window_manager_get_head() == g_tw->win &&
+                !window_is_minimized(g_tw->win)) {
+                term_window_handle_key(g_tw, c);
+                desktop_redraw();
+            }
+        }
+    }
+}
+
 static void window_closed(window_t *win) {
     if (g_tw && win == g_tw->win) {
         g_tw->win = NULL;
@@ -157,21 +176,9 @@ void kernel_main(void) {
     desktop_redraw();
 #undef STEP
 
-    /* ---- Main event loop ---- */
-    while (1) {
-        scheduler_poll();
+    scheduler_register_main_task("desktop");
 
-        if (desktop_process()) desktop_redraw();
-
-        if (keyboard_has_key()) {
-            char c = keyboard_read_key();
-            /* Route keyboard to terminal window when it is focused */
-            if (g_tw &&
-                window_manager_get_head() == g_tw->win &&
-                !window_is_minimized(g_tw->win)) {
-                term_window_handle_key(g_tw, c);
-                desktop_redraw();
-            }
-        }
-    }
+    /* Switch to a dedicated kernel stack for the desktop event loop and
+       jump into it. Never returns — boot stack is abandoned past this point. */
+    scheduler_run_on_main_stack(desktop_main_loop, scheduler_main_stack_top());
 }

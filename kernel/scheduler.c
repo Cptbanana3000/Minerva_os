@@ -17,6 +17,7 @@ typedef struct {
 static sched_task_t tasks[SCHED_MAX_TASKS];
 static uint32_t task_stacks[SCHED_MAX_TASKS][256];
 static uint32_t irq_stacks[SCHED_MAX_TASKS][256];
+static uint32_t main_stack[2048] __attribute__((aligned(16)));
 static uint32_t task_count = 0;
 static int current_task = -1;
 static uint32_t main_esp = 0;
@@ -28,11 +29,14 @@ static uint32_t irq_context_count = 0;
 static uint32_t irq_candidate_count = 0;
 static uint32_t irq_preempt_switch_count = 0;
 static uint32_t irq_preempt_blocked_count = 0;
+static uint32_t main_capture_count = 0;
+static uint32_t main_captured_esp = 0;
 static uint32_t last_irq_eip = 0;
 static uint8_t switch_pending = 0;
 static uint8_t irq_candidate_ready = 0;
 static uint8_t preemptive_enabled = SCHED_PREEMPTIVE_ENABLED;
 static uint8_t in_task = 0;
+static int main_task_id = -1;
 
 extern void scheduler_context_switch(uint32_t *old_esp, uint32_t new_esp);
 
@@ -107,11 +111,14 @@ void scheduler_init(void) {
     irq_candidate_count = 0;
     irq_preempt_switch_count = 0;
     irq_preempt_blocked_count = 0;
+    main_capture_count = 0;
+    main_captured_esp = 0;
     last_irq_eip = 0;
     switch_pending = 0;
     irq_candidate_ready = 0;
     preemptive_enabled = SCHED_PREEMPTIVE_ENABLED;
     in_task = 0;
+    main_task_id = -1;
 }
 
 int scheduler_create_kernel_task(const char *name, sched_task_fn_t entry, void *ctx) {
@@ -131,6 +138,36 @@ int scheduler_create_kernel_task(const char *name, sched_task_fn_t entry, void *
 
     if (current_task < 0) current_task = 0;
     return (int)id;
+}
+
+int scheduler_register_main_task(const char *name) {
+    if (!name || task_count >= SCHED_MAX_TASKS || main_task_id >= 0) return -1;
+
+    uint32_t id = task_count;
+    tasks[id].id = id;
+    tasks[id].name = name;
+    tasks[id].entry = 0;
+    tasks[id].ctx = 0;
+    tasks[id].esp = 0;
+    tasks[id].irq_esp = 0;
+    tasks[id].runs = 0;
+    tasks[id].active = 1;
+    task_count++;
+    main_task_id = (int)id;
+    return (int)id;
+}
+
+uint32_t scheduler_main_task_id(void) {
+    if (main_task_id < 0) return 0xFFFFFFFFu;
+    return (uint32_t)main_task_id;
+}
+
+uint32_t scheduler_main_stack_top(void) {
+    return (uint32_t)(main_stack + 2048);
+}
+
+uint32_t scheduler_main_stack_base(void) {
+    return (uint32_t)main_stack;
 }
 
 void scheduler_tick(void) {
@@ -167,6 +204,10 @@ uint32_t scheduler_on_timer_interrupt(const struct interrupt_frame *frame) {
     if (!preemptive_enabled) return 0;
 
     if (!in_task || current_task < 0 || !tasks[current_task].active) {
+        if (main_task_id >= 0 && !in_task) {
+            main_captured_esp = (uint32_t)frame;
+            main_capture_count++;
+        }
         irq_preempt_blocked_count++;
         return 0;
     }
@@ -183,14 +224,19 @@ void scheduler_poll(void) {
     if (!switch_pending || task_count == 0) return;
     switch_pending = 0;
 
-    current_task++;
-    if (current_task >= (int)task_count) current_task = 0;
-
-    if (!tasks[current_task].active || !tasks[current_task].entry) return;
-    switch_count++;
-    in_task = 1;
-    scheduler_context_switch(&main_esp, tasks[current_task].esp);
-    in_task = 0;
+    int next = current_task;
+    for (uint32_t i = 0; i < task_count; i++) {
+        next++;
+        if (next >= (int)task_count) next = 0;
+        if (tasks[next].active && tasks[next].entry) {
+            current_task = next;
+            switch_count++;
+            in_task = 1;
+            scheduler_context_switch(&main_esp, tasks[current_task].esp);
+            in_task = 0;
+            return;
+        }
+    }
 }
 
 void scheduler_yield(void) {
@@ -246,6 +292,14 @@ uint32_t scheduler_irq_preempt_switch_count(void) {
 
 uint32_t scheduler_irq_preempt_blocked_count(void) {
     return irq_preempt_blocked_count;
+}
+
+uint32_t scheduler_main_capture_count(void) {
+    return main_capture_count;
+}
+
+uint32_t scheduler_main_captured_esp(void) {
+    return main_captured_esp;
 }
 
 uint32_t scheduler_last_irq_eip(void) {

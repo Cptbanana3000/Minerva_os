@@ -100,6 +100,9 @@
 - [x] Disabled preemptive switch candidate path
 - [x] Runtime preemption gate
 - [x] Unsafe IRQ preemption guard
+- [x] Main/desktop loop registered as a scheduler slot
+- [x] Main-loop IRQ frame capture (diagnostic, no switch)
+- [x] Dedicated kernel stack for the desktop main loop
 - [ ] Preemptive round-robin scheduler
 - [ ] Process table
 - [ ] Context switching (save/restore CPU state)

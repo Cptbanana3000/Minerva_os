@@ -512,11 +512,41 @@ Phase 4 is complete. Phase 5 has begun with a non-invasive scheduler skeleton:
   not already running on a task stack, and `tasks` reports those refusals as
   `Block`. This protects the desktop/main loop until it becomes a real
   schedulable context.
+- The desktop/main loop now owns an explicit scheduler slot, registered via
+  `scheduler_register_main_task("desktop")` just before the event loop. The
+  slot has no entry function, no kernel stack, and no IRQ frame, so it is
+  invisible to both the cooperative switch path and the IRQ0 preemption
+  candidate picker. It appears in `tasks` purely as bookkeeping. `scheduler_poll`
+  was reworked into a bounded skip-loop so the entry-less main slot is never a
+  context-switch target.
+- IRQ0 now captures the main loop's interrupt frame into a dedicated
+  `main_captured_esp` static (separate from `tasks[main].irq_esp`) and bumps a
+  `main_capture_count` counter, each time a timer tick fires while the main loop
+  is the interrupted context. The capture is deliberately stored OUTSIDE the
+  task table so the main slot remains invisible to `scheduler_next_active_irq_task`
+  — until the return-to-main path exists, promoting the capture into the task
+  slot would let a preempted task be "restored" to a stale main frame with no
+  way to land safely. The terminal `tasks` view shows the capture as `MainCap`,
+  which climbs in lockstep with `Block` whenever `preempt on` is set, proving
+  the timer path correctly identifies the main loop and saves its frame.
+- The desktop event loop was moved off the bootloader stack onto a dedicated
+  8 KiB kernel stack (`main_stack[2048]`, 16-byte aligned). A tiny asm helper
+  `scheduler_run_on_main_stack(entry, new_esp)` swaps ESP and `call`s the
+  extracted `desktop_main_loop()` function; if that ever returns the helper
+  halts. `kernel_main` now ends with that call and the boot stack is abandoned
+  past that point. This is purely foundational — no observable behavior
+  change — but it is the prerequisite for safe return-to-main, because
+  captured main frames will now sit on a stack region that nothing else writes
+  to while main is paused. Verified in QEMU: desktop, terminal, window drag,
+  and the `tasks` / `preempt on` counters all behave identically.
 
 This is still cooperative rather than preemptive, but it now performs real
 kernel-stack switching. Timer interrupts request scheduling; the main loop still
 performs the actual switch safely outside the IRQ handler.
 
-The next safe Phase 5 slice is making the main/desktop loop an explicit
-schedulable context, so IRQ0 can switch away from it and later return to it
-without losing the GUI event loop.
+The next safe Phase 5 slice is atomic capture-and-switch: when IRQ0 fires in
+the main loop AND there is a task to run, save the main frame into
+`tasks[main].irq_esp` and switch to the chosen task in the SAME ISR call (not
+deferred). Because main is now on its own stack, the saved frame stays valid
+while main is paused, and the existing task→task IRQ switch machinery can
+then ferry execution back to main on a later tick.

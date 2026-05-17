@@ -13,6 +13,11 @@ typedef void (*sched_list_cb_t)(uint32_t id, const char *name, uint32_t runs, vo
 
 void scheduler_init(void);
 int scheduler_create_kernel_task(const char *name, sched_task_fn_t entry, void *ctx);
+int scheduler_register_main_task(const char *name);
+uint32_t scheduler_main_task_id(void);
+uint32_t scheduler_main_stack_top(void);
+uint32_t scheduler_main_stack_base(void);
+void scheduler_run_on_main_stack(void (*entry)(void), uint32_t new_esp);
 void scheduler_tick(void);
 void scheduler_note_interrupt_frame(const struct interrupt_frame *frame);
 uint32_t scheduler_on_timer_interrupt(const struct interrupt_frame *frame);
@@ -30,6 +35,8 @@ uint32_t scheduler_irq_context_count(void);
 uint32_t scheduler_irq_candidate_count(void);
 uint32_t scheduler_irq_preempt_switch_count(void);
 uint32_t scheduler_irq_preempt_blocked_count(void);
+uint32_t scheduler_main_capture_count(void);
+uint32_t scheduler_main_captured_esp(void);
 uint32_t scheduler_last_irq_eip(void);
 void scheduler_list(sched_list_cb_t cb, void *ctx);
 
