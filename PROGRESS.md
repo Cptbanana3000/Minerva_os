@@ -3,6 +3,12 @@
 This file records how MinervaOS is growing. `PHASES.md` is the checklist; this
 log explains the path, the safety rules, and the tests used along the way.
 
+The roadmap now has two layers: near-term phases for the current QEMU hobby OS
+and a long-term full-OS roadmap. The long-term section explicitly tracks goals
+such as Full HD graphics, true-color compositing, crisp icons, hardware support,
+real userland executables, POSIX-like APIs, security, packaging, distribution,
+and open-source project maturity.
+
 ---
 
 ## Current Shape
@@ -19,6 +25,29 @@ Phase 5 is complete: the kernel has scheduler-owned kernel tasks, a process
 table, preemptive round-robin switching for kernel tasks, GDT/TSS-backed ring-3
 entry, syscall return to kernel, scheduler-owned user launches, and a recovered
 user-mode page-fault proof that demonstrates privilege separation.
+
+Phase 6 has begun with a graphical text editor skeleton: the desktop now has an
+`Edit` icon, the editor opens as a window, accepts focused keyboard input, keeps
+an in-memory text buffer, renders a cursor, and marks the buffer dirty when
+edited.
+
+The editor now opens and saves a fixed root-directory file, `NOTE.TXT`. On
+open, it loads existing file contents if present or starts as a new empty note.
+`Esc` saves through `fs_write(... FS_WRITE_CREATE | FS_WRITE_TRUNCATE)`, the
+status label reports load/save state, and the dirty marker clears after a
+successful save. This keeps the first application file workflow narrow while
+exercising the Phase 4 write API from a graphical app.
+
+The terminal can now launch the editor on any root-directory 8.3 filename with
+`edit NAME`. The editor window is reused if it is already open, the selected
+filename is shown in the status row, and `Esc` saves back to that same file.
+The desktop `Edit` icon remains a convenient shortcut for `NOTE.TXT`.
+
+The first `edit NAME` implementation exposed an app-lifecycle bug: the terminal
+could create the editor singleton, but the desktop loop still only routed render
+and keyboard events through the pointer set by the desktop icon path. The editor
+module now exposes `text_editor_active()`, so windows opened from either the
+terminal or the icon are rendered and receive focused keyboard input correctly.
 
 ---
 
@@ -829,3 +858,241 @@ Expected results:
 This proves the Phase 5 boundary: user code can run in ring 3 and call into the
 kernel through `int 0x80`, while supervisor-only kernel pages remain protected
 and recoverable user faults are captured as process metadata.
+
+## Phase 6 Applications Growth
+
+Phase 6 started with the first graphical application beyond terminal/about:
+
+- `drivers/text_editor.c` and `include/text_editor.h` define a small editor app.
+- The desktop has an `Edit` icon that opens an `Editor` window.
+- Focused keyboard input is routed to the editor when its window is on top.
+- The editor supports printable characters, Enter, and Backspace.
+- The text buffer is in-memory only for now, with a simple cursor and dirty
+  marker rendered in the window.
+- `NOTE.TXT` is loaded when the editor opens and saved with `Esc`.
+- `edit NAME` opens or creates a chosen root-directory file in the graphical
+  editor.
+
+Smoke test:
+
+```text
+make run
+```
+
+Open the `Edit` icon, type text, use Enter and Backspace, press `Esc` to save,
+close/reopen the editor, and confirm the note reloads. Then focus the terminal
+again to confirm keyboard routing follows the active window.
+
+Additional smoke test:
+
+```text
+edit TODO.TXT
+```
+
+Type text in the editor, press `Esc`, then return to the terminal and run:
+
+```text
+cat TODO.TXT
+```
+
+### Image Viewer Skeleton
+
+The image viewer app shell is now present:
+
+- `drivers/image_viewer.c` and `include/image_viewer.h` define the viewer app.
+- The desktop has a `View` icon that opens an `Image` window for `IMAGE.BMP`.
+- The terminal command `view NAME` opens the viewer on any root-directory 8.3
+  filename.
+- The viewer reuses a single active window across icon and terminal launches,
+  matching the editor lifecycle pattern.
+- The current slice probes file existence and size, displays filename/status,
+  and renders a placeholder preview area; actual BMP decoding remains the next
+  image-viewer step.
+
+Smoke test:
+
+```text
+view TEST.BMP
+view IMAGE.BMP
+```
+
+Expected result: the `Image` window opens, comes to front, and reports either
+`MISSING` or `READY` with a byte count depending on whether the file exists.
+
+### BMP Rendering
+
+The image viewer now has a first real decode path:
+
+- `scripts/make_fat32_image.py` generates a tiny `TEST.BMP` into `fs.img`.
+- The BMP is 16x12, uncompressed, 24-bit RGB, and fits the current 1 KiB
+  one-buffer viewer read path.
+- `drivers/image_viewer.c` validates the BMP header, checks dimensions and
+  compression, converts BGR pixels through `graphics_rgb()`, and scales the
+  image into the preview area.
+- Unsupported files still show status text such as `NOT BMP`, `UNSUP`,
+  `TOO BIG`, or `MISSING`.
+
+Smoke test:
+
+```text
+view TEST.BMP
+```
+
+Expected result: the image viewer reports `BMP24` and displays the generated
+color test bitmap instead of the placeholder.
+
+The first smoke attempt reported `TOO BIG` because the generated `TEST.BMP`
+is 630 bytes and the viewer buffer was still 512 bytes. The viewer buffer is
+now 1 KiB, which keeps the decoder simple while allowing the generated test
+asset to load fully.
+
+### Audio Player Metadata
+
+The audio player app shell is now present:
+
+- `scripts/make_fat32_image.py` generates `AUDIO.WAV`, a tiny 8-bit mono PCM
+  test file.
+- `drivers/audio_player.c` and `include/audio_player.h` define the audio app.
+- The desktop has an `Aud` icon that opens an `Audio` window for `AUDIO.WAV`.
+- The terminal command `play NAME` opens the audio app on any root-directory
+  8.3 filename.
+- The WAV parser validates RIFF/WAVE, finds `fmt ` and `data` chunks, and
+  reports PCM metadata: sample rate, channels, bit depth, and data bytes.
+
+Smoke test:
+
+```text
+play AUDIO.WAV
+play TEST.BMP
+```
+
+Expected result: `AUDIO.WAV` reports `PCM`, `rate 8000`, `ch 1`, `bits 8`,
+and a data size. Non-WAV files report `NOT WAV` or another validation status.
+Actual audio output remains a future slice after choosing a playback device
+path such as PC speaker, Sound Blaster, or another emulated audio target.
+
+### PC Speaker WAV Preview
+
+The first playback path now exists through the PC speaker:
+
+- `drivers/speaker.c` and `include/speaker.h` drive PIT channel 2 and port
+  `0x61`.
+- `play NAME` still opens the audio app, but now also attempts a short playback
+  preview when the file is 8-bit mono PCM WAV.
+- The preview maps WAV sample amplitudes to short PC-speaker square-wave tones.
+  This is intentionally crude, but it proves the kernel can parse audio data
+  and drive a real audio output path.
+- Unsupported WAV formats keep the metadata path but report `NO PLAY`.
+
+Smoke test:
+
+```text
+play AUDIO.WAV
+```
+
+Expected result: the audio window status changes to `PLAYED`. Depending on QEMU
+audio backend settings, the PC-speaker tones may or may not be audible on the
+host, but the OS-side playback path runs.
+
+## Phase 6 Completion
+
+Phase 6 is now complete. MinervaOS has a window-based application layer with:
+
+- Terminal app with shell commands and filesystem/process/networking diagnostics.
+- Text editor that opens, edits, and saves root-directory 8.3 files.
+- Image viewer that opens files and renders uncompressed 24-bit BMP images.
+- Audio player that parses WAV metadata and runs a PC-speaker playback preview
+  for 8-bit mono PCM WAV files.
+
+The next phase is Phase 7 networking, starting with PCI/e1000 discovery before
+packet receive/transmit.
+
+## Phase 7 Start: PCI and e1000 Discovery
+
+MinervaOS now has the first networking foundation layer:
+
+- `include/io.h` supports 32-bit port I/O through `inl()` and `outl()`.
+- `drivers/pci.c` can read PCI config space and scan bus/slot/function entries.
+- `drivers/e1000.c` finds Intel e1000-class Ethernet devices exposed by QEMU.
+- `make run` now adds QEMU user networking with an e1000 adapter.
+
+Terminal command:
+
+```text
+net
+```
+
+Expected result with `make run`: `e1000:yes`, followed by the PCI bus/device/
+function, vendor ID, device ID, and BAR0. This proves the OS can discover the
+virtual network card before we start touching the e1000 MMIO registers.
+
+## Phase 7: e1000 MMIO and MAC Address
+
+The e1000 path now enables PCI memory space/bus mastering, maps the device BAR0
+MMIO window into the current page tables, and reads receive address register 0
+from the e1000 register block.
+
+Terminal command:
+
+```text
+net
+```
+
+Expected result: the network diagnostics now include the BAR type and MAC
+address. With QEMU's e1000 device this should show `TYPE:MMIO` and a six-byte
+MAC address, proving MinervaOS can safely touch the NIC's register space.
+
+## Phase 7: e1000 Transmit Ring
+
+The e1000 driver now initializes a small transmit descriptor ring backed by
+kernel-resident packet buffers, enables the e1000 transmit engine, and exposes a
+manual raw-frame transmit smoke test.
+
+Terminal command:
+
+```text
+net tx
+```
+
+Expected result: `TX sent`, with the attempt/sent/error counters updated. The
+test packet is a padded 60-byte Ethernet broadcast frame using ethertype
+`0x88B5` and the NIC's own MAC address as the source. This does not require an
+Ethernet cable; QEMU carries the virtual NIC traffic through the host network.
+
+## Phase 7: e1000 Receive Ring
+
+The e1000 driver now initializes a receive descriptor ring with 2 KiB packet
+buffers, enables broadcast/unicast/multicast receive filtering for early
+diagnostics, and exposes a manual receive poll command.
+
+Terminal command:
+
+```text
+net rx
+```
+
+Expected result when no traffic is waiting: `RX none`, with `RX:ready` still
+visible in `net`. When QEMU delivers a packet, the command reports the packet
+counter, length, ethertype, descriptor status, and descriptor error byte.
+
+## Phase 7: Packet API and ARP Probe
+
+The e1000 driver now exposes generic packet send/receive helpers, and a small
+network layer sits above it with MinervaOS' first Ethernet/ARP behavior.
+
+Current static QEMU user-network identity:
+
+```text
+MinervaOS IP: 10.0.2.15
+Gateway IP:   10.0.2.2
+```
+
+Terminal command:
+
+```text
+net arp
+```
+
+Expected result with QEMU user networking: `ARP ok`, request/reply counters,
+and the gateway MAC address. The plain `net` command now also prints the static
+IP, gateway IP, and cached ARP MAC if one has been learned.

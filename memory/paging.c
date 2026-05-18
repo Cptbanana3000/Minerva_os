@@ -49,4 +49,13 @@ void paging_map(uint32_t virt, uint32_t phys, uint32_t flags) {
 
     uint32_t* pt = (uint32_t*)(page_dir[pd_i] & ~0xFFFu);
     pt[pt_i] = (phys & ~0xFFFu) | (flags & 0xFFFu) | PAGE_PRESENT;
+    __asm__ volatile ("invlpg (%0)" : : "r"(virt) : "memory");
+}
+
+void paging_map_range(uint32_t virt, uint32_t phys, uint32_t size, uint32_t flags) {
+    uint32_t offset = 0;
+    while (offset < size) {
+        paging_map(virt + offset, phys + offset, flags);
+        offset += 4096;
+    }
 }

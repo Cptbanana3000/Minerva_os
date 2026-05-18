@@ -9,5 +9,6 @@
 
 void paging_init(void);
 void paging_map(uint32_t virt, uint32_t phys, uint32_t flags);
+void paging_map_range(uint32_t virt, uint32_t phys, uint32_t size, uint32_t flags);
 
 #endif

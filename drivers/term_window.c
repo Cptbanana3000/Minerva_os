@@ -7,12 +7,17 @@
 #include "pmm.h"
 #include "io.h"
 #include "fs.h"
+#include "text_editor.h"
+#include "image_viewer.h"
+#include "audio_player.h"
 #include "scheduler.h"
 #include "process.h"
 #include "gdt.h"
 #include "interrupts.h"
 #include "usermode.h"
 #include "user_scheduler.h"
+#include "e1000.h"
+#include "net.h"
 
 static term_window_t g_tw;
 static uint8_t file_buffer[512];
@@ -62,6 +67,26 @@ static void tw_print_hex32(term_window_t *t, uint32_t n) {
     const char *digits = "0123456789ABCDEF";
     for (int shift = 28; shift >= 0; shift -= 4) {
         term_window_putc(t, digits[(n >> shift) & 0xFu]);
+    }
+}
+
+static void tw_print_hex8(term_window_t *t, uint8_t n) {
+    const char *digits = "0123456789ABCDEF";
+    term_window_putc(t, digits[(n >> 4) & 0xFu]);
+    term_window_putc(t, digits[n & 0xFu]);
+}
+
+static void tw_print_ip(term_window_t *t, const uint8_t ip[4]) {
+    for (uint32_t i = 0; i < 4; i++) {
+        if (i) term_window_putc(t, '.');
+        tw_print_num(t, ip[i]);
+    }
+}
+
+static void tw_print_mac(term_window_t *t, const uint8_t mac[6]) {
+    for (uint32_t i = 0; i < 6; i++) {
+        if (i) term_window_putc(t, ':');
+        tw_print_hex8(t, mac[i]);
     }
 }
 
@@ -226,9 +251,12 @@ static void tw_exec(term_window_t *t) {
         term_window_print(t, "userreset usersched\n");
         term_window_print(t, "userfault ufault\n");
         term_window_print(t, "userrun usched uproc\n");
-        term_window_print(t, "ls cat touch write\n");
+        term_window_print(t, "ls cat edit view\n");
+        term_window_print(t, "play touch write\n");
         term_window_print(t, "append truncate delete\n");
-        term_window_print(t, "rename preempt reboot\n");
+        term_window_print(t, "rename net net tx\n");
+        term_window_print(t, "net rx net arp\n");
+        term_window_print(t, "preempt reboot\n");
     } else if (strcmp(cmd, "clear") == 0) {
         memset(t->buf, 0, sizeof(t->buf));
         t->cur_col = 0;
@@ -415,6 +443,122 @@ static void tw_exec(term_window_t *t) {
         process_list(tw_user_process_entry, t);
     } else if (strcmp(cmd, "uctx") == 0) {
         process_list(tw_user_context_entry, t);
+    } else if (strcmp(cmd, "net arp") == 0) {
+        if (net_arp_probe_gateway()) {
+            term_window_print(t, "ARP ok\n");
+        } else {
+            term_window_print(t, "ARP wait\n");
+        }
+        const net_info_t *info = net_info();
+        term_window_print(t, "Req:");
+        tw_print_num(t, info->arp_requests);
+        term_window_putc(t, '\n');
+        term_window_print(t, "Rep:");
+        tw_print_num(t, info->arp_replies);
+        term_window_putc(t, '\n');
+        term_window_print(t, "Rx:");
+        tw_print_num(t, info->rx_frames);
+        term_window_putc(t, '\n');
+        term_window_print(t, "Gw:");
+        if (info->gateway_mac_valid) {
+            tw_print_mac(t, info->gateway_mac);
+            term_window_putc(t, '\n');
+        } else {
+            term_window_print(t, "unknown\n");
+        }
+    } else if (strcmp(cmd, "net tx") == 0) {
+        if (e1000_send_test_frame()) {
+            term_window_print(t, "TX sent\n");
+        } else {
+            term_window_print(t, "TX failed\n");
+        }
+        const e1000_info_t *net = e1000_info();
+        term_window_print(t, "Try:");
+        tw_print_num(t, net->tx_attempts);
+        term_window_putc(t, '\n');
+        term_window_print(t, "Sent:");
+        tw_print_num(t, net->tx_sent);
+        term_window_putc(t, '\n');
+        term_window_print(t, "Err:");
+        tw_print_num(t, net->tx_errors);
+        term_window_putc(t, '\n');
+        term_window_print(t, "Stat:");
+        tw_print_hex8(t, net->tx_last_status);
+        term_window_putc(t, '\n');
+    } else if (strcmp(cmd, "net rx") == 0) {
+        if (e1000_poll_receive()) {
+            term_window_print(t, "RX packet\n");
+        } else {
+            term_window_print(t, "RX none\n");
+        }
+        const e1000_info_t *net = e1000_info();
+        term_window_print(t, "Pkts:");
+        tw_print_num(t, net->rx_packets);
+        term_window_putc(t, '\n');
+        term_window_print(t, "Err:");
+        tw_print_num(t, net->rx_errors);
+        term_window_putc(t, '\n');
+        term_window_print(t, "Len:");
+        tw_print_num(t, net->rx_last_length);
+        term_window_putc(t, '\n');
+        term_window_print(t, "Type:");
+        tw_print_hex32(t, net->rx_last_type);
+        term_window_putc(t, '\n');
+        term_window_print(t, "Stat:");
+        tw_print_hex8(t, net->rx_last_status);
+        term_window_putc(t, ' ');
+        term_window_print(t, "Er:");
+        tw_print_hex8(t, net->rx_last_errors);
+        term_window_putc(t, '\n');
+    } else if (strcmp(cmd, "net") == 0) {
+        const e1000_info_t *net = e1000_info();
+        term_window_print(t, "e1000:");
+        term_window_print(t, net->present ? "yes\n" : "no\n");
+        if (net->present) {
+            term_window_print(t, "BDF:");
+            tw_print_num(t, net->pci.bus);
+            term_window_putc(t, ':');
+            tw_print_num(t, net->pci.slot);
+            term_window_putc(t, '.');
+            tw_print_num(t, net->pci.function);
+            term_window_putc(t, '\n');
+            term_window_print(t, "VID:");
+            tw_print_hex32(t, net->pci.vendor_id);
+            term_window_putc(t, '\n');
+            term_window_print(t, "DID:");
+            tw_print_hex32(t, net->pci.device_id);
+            term_window_putc(t, '\n');
+            term_window_print(t, "BAR0:");
+            tw_print_hex32(t, net->pci.bar0);
+            term_window_putc(t, '\n');
+            term_window_print(t, "TYPE:");
+            term_window_print(t, net->mmio ? "MMIO\n" : "IO\n");
+            term_window_print(t, "TX:");
+            term_window_print(t, net->tx_ready ? "ready\n" : "off\n");
+            term_window_print(t, "RX:");
+            term_window_print(t, net->rx_ready ? "ready\n" : "off\n");
+            const net_info_t *info = net_info();
+            term_window_print(t, "IP:");
+            tw_print_ip(t, info->local_ip);
+            term_window_putc(t, '\n');
+            term_window_print(t, "GW:");
+            tw_print_ip(t, info->gateway_ip);
+            term_window_putc(t, '\n');
+            if (net->mac_valid) {
+                term_window_print(t, "MAC:");
+                tw_print_mac(t, net->mac);
+                term_window_putc(t, '\n');
+            } else {
+                term_window_print(t, "MAC:unread\n");
+            }
+            term_window_print(t, "ARP:");
+            if (info->gateway_mac_valid) {
+                tw_print_mac(t, info->gateway_mac);
+                term_window_putc(t, '\n');
+            } else {
+                term_window_print(t, "none\n");
+            }
+        }
     } else if (strcmp(cmd, "tasks") == 0) {
         term_window_print(t, "Switches:");
         tw_print_num(t, scheduler_switch_count());
@@ -504,6 +648,30 @@ static void tw_exec(term_window_t *t) {
             } else if (size == 0 || last != '\n') {
                 term_window_putc(t, '\n');
             }
+        }
+    } else if (starts_with(cmd, "edit ")) {
+        const char *name = cmd + 5;
+        if (!*name) {
+            term_window_print(t, "edit failed\n");
+        } else if (!text_editor_open_file(82, 20, name)) {
+            term_window_print(t, "edit failed\n");
+        }
+    } else if (starts_with(cmd, "view ")) {
+        const char *name = cmd + 5;
+        if (!*name) {
+            term_window_print(t, "view failed\n");
+        } else if (!image_viewer_open_file(96, 28, name)) {
+            term_window_print(t, "view failed\n");
+        }
+    } else if (starts_with(cmd, "play ")) {
+        const char *name = cmd + 5;
+        audio_player_t *player;
+        if (!*name) {
+            term_window_print(t, "play failed\n");
+        } else if (!(player = audio_player_open_file(92, 42, name))) {
+            term_window_print(t, "play failed\n");
+        } else if (!audio_player_play_preview(player)) {
+            term_window_print(t, "No playback\n");
         }
     } else if (starts_with(cmd, "touch ")) {
         const char *name = cmd + 6;

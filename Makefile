@@ -7,6 +7,7 @@ ASM     = nasm
 QEMU    = qemu-system-i386
 QEMU_PATH = /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 QEMU_ENV = env -i HOME="$(HOME)" USER="$(USER)" PATH="$(QEMU_PATH)" DISPLAY="$(DISPLAY)" WAYLAND_DISPLAY="$(WAYLAND_DISPLAY)" XAUTHORITY="$(XAUTHORITY)" XDG_RUNTIME_DIR="$(XDG_RUNTIME_DIR)" DBUS_SESSION_BUS_ADDRESS="$(DBUS_SESSION_BUS_ADDRESS)"
+QEMU_NET = -netdev user,id=net0 -device e1000,netdev=net0
 
 CFLAGS  = -m32 -Os -ffreestanding -fno-pie -fno-stack-protector -nostdlib -Wall -Wextra -c
 LDFLAGS = -m elf_i386 -T linker.ld --oformat binary -nostdlib
@@ -50,8 +51,29 @@ drivers/ata.o: drivers/ata.c include/ata.h include/io.h
 drivers/desktop.o: drivers/desktop.c include/desktop.h include/graphics.h include/window.h include/mouse.h
 	$(CC) $(CFLAGS) $(INCLUDES) drivers/desktop.c -o drivers/desktop.o
 
-drivers/term_window.o: drivers/term_window.c include/term_window.h include/window.h include/graphics.h include/libc.h include/serial.h include/pmm.h include/io.h include/fs.h include/scheduler.h include/process.h include/gdt.h include/interrupts.h include/usermode.h include/user_scheduler.h
+drivers/term_window.o: drivers/term_window.c include/term_window.h include/window.h include/graphics.h include/libc.h include/serial.h include/pmm.h include/io.h include/fs.h include/text_editor.h include/image_viewer.h include/audio_player.h include/scheduler.h include/process.h include/gdt.h include/interrupts.h include/usermode.h include/user_scheduler.h include/e1000.h include/pci.h include/net.h
 	$(CC) $(CFLAGS) $(INCLUDES) drivers/term_window.c -o drivers/term_window.o
+
+drivers/text_editor.o: drivers/text_editor.c include/text_editor.h include/window.h include/graphics.h include/libc.h include/fs.h
+	$(CC) $(CFLAGS) $(INCLUDES) drivers/text_editor.c -o drivers/text_editor.o
+
+drivers/image_viewer.o: drivers/image_viewer.c include/image_viewer.h include/window.h include/graphics.h include/libc.h include/fs.h
+	$(CC) $(CFLAGS) $(INCLUDES) drivers/image_viewer.c -o drivers/image_viewer.o
+
+drivers/audio_player.o: drivers/audio_player.c include/audio_player.h include/window.h include/graphics.h include/libc.h include/fs.h include/speaker.h
+	$(CC) $(CFLAGS) $(INCLUDES) drivers/audio_player.c -o drivers/audio_player.o
+
+drivers/speaker.o: drivers/speaker.c include/speaker.h include/io.h include/interrupts.h
+	$(CC) $(CFLAGS) $(INCLUDES) drivers/speaker.c -o drivers/speaker.o
+
+drivers/pci.o: drivers/pci.c include/pci.h include/io.h
+	$(CC) $(CFLAGS) $(INCLUDES) drivers/pci.c -o drivers/pci.o
+
+drivers/e1000.o: drivers/e1000.c include/e1000.h include/pci.h include/paging.h include/serial.h include/libc.h
+	$(CC) $(CFLAGS) $(INCLUDES) drivers/e1000.c -o drivers/e1000.o
+
+drivers/net.o: drivers/net.c include/net.h include/e1000.h include/libc.h
+	$(CC) $(CFLAGS) $(INCLUDES) drivers/net.c -o drivers/net.o
 
 fs/fat32.o: fs/fat32.c include/fs.h include/ata.h include/libc.h
 	$(CC) $(CFLAGS) $(INCLUDES) fs/fat32.c -o fs/fat32.o
@@ -98,15 +120,15 @@ interrupts/interrupts.o: interrupts/interrupts.c include/interrupts.h include/io
 interrupts/pit.o: interrupts/pit.c include/interrupts.h include/io.h include/scheduler.h
 	$(CC) $(CFLAGS) $(INCLUDES) interrupts/pit.c -o interrupts/pit.o
 
-kernel.o: kernel.c include/io.h include/keyboard.h include/interrupts.h include/libc.h include/memory.h include/serial.h include/graphics.h include/window.h include/desktop.h include/term_window.h include/mouse.h include/pmm.h include/paging.h include/fs.h include/scheduler.h include/process.h include/gdt.h include/usermode.h include/user_scheduler.h
+kernel.o: kernel.c include/io.h include/keyboard.h include/interrupts.h include/libc.h include/memory.h include/serial.h include/graphics.h include/window.h include/desktop.h include/term_window.h include/text_editor.h include/image_viewer.h include/audio_player.h include/mouse.h include/pmm.h include/paging.h include/fs.h include/scheduler.h include/process.h include/gdt.h include/usermode.h include/user_scheduler.h include/e1000.h include/net.h
 	$(CC) $(CFLAGS) $(INCLUDES) kernel.c -o kernel.o
 
 interrupts/isr.o: interrupts/isr.asm
 	$(ASM) -f elf32 interrupts/isr.asm -o interrupts/isr.o
 
-kernel.bin: kernel_entry.o interrupts/isr.o libc/string.o drivers/vga.o drivers/keyboard.o drivers/serial.o drivers/graphics.o drivers/window.o drivers/terminal.o drivers/desktop.o drivers/term_window.o drivers/ata.o fs/fat32.o kernel/scheduler.o kernel/process.o kernel/gdt.o kernel/gdt_asm.o kernel/usermode.o kernel/user_scheduler.o kernel/usermode_asm.o kernel/switch.o kernel/main_stack.o memory/allocator.o memory/pmm.o memory/paging.o interrupts/interrupts.o interrupts/pit.o kernel.o linker.ld drivers/mouse.o
-	$(LD) $(LDFLAGS) -o kernel.bin kernel_entry.o interrupts/isr.o libc/string.o drivers/vga.o drivers/keyboard.o drivers/serial.o drivers/graphics.o drivers/window.o drivers/terminal.o drivers/desktop.o drivers/term_window.o drivers/ata.o fs/fat32.o kernel/scheduler.o kernel/process.o kernel/gdt.o kernel/gdt_asm.o kernel/usermode.o kernel/user_scheduler.o kernel/usermode_asm.o kernel/switch.o kernel/main_stack.o memory/allocator.o memory/pmm.o memory/paging.o interrupts/interrupts.o interrupts/pit.o kernel.o drivers/mouse.o
-	$(LD) -m elf_i386 -T linker.ld -nostdlib -o kernel.elf kernel_entry.o interrupts/isr.o libc/string.o drivers/vga.o drivers/keyboard.o drivers/serial.o drivers/graphics.o drivers/window.o drivers/terminal.o drivers/desktop.o drivers/term_window.o drivers/ata.o fs/fat32.o kernel/scheduler.o kernel/process.o kernel/gdt.o kernel/gdt_asm.o kernel/usermode.o kernel/user_scheduler.o kernel/usermode_asm.o kernel/switch.o kernel/main_stack.o memory/allocator.o memory/pmm.o memory/paging.o interrupts/interrupts.o interrupts/pit.o kernel.o drivers/mouse.o
+kernel.bin: kernel_entry.o interrupts/isr.o libc/string.o drivers/vga.o drivers/keyboard.o drivers/serial.o drivers/graphics.o drivers/window.o drivers/terminal.o drivers/desktop.o drivers/term_window.o drivers/text_editor.o drivers/image_viewer.o drivers/audio_player.o drivers/speaker.o drivers/pci.o drivers/e1000.o drivers/net.o drivers/ata.o fs/fat32.o kernel/scheduler.o kernel/process.o kernel/gdt.o kernel/gdt_asm.o kernel/usermode.o kernel/user_scheduler.o kernel/usermode_asm.o kernel/switch.o kernel/main_stack.o memory/allocator.o memory/pmm.o memory/paging.o interrupts/interrupts.o interrupts/pit.o kernel.o linker.ld drivers/mouse.o
+	$(LD) $(LDFLAGS) -o kernel.bin kernel_entry.o interrupts/isr.o libc/string.o drivers/vga.o drivers/keyboard.o drivers/serial.o drivers/graphics.o drivers/window.o drivers/terminal.o drivers/desktop.o drivers/term_window.o drivers/text_editor.o drivers/image_viewer.o drivers/audio_player.o drivers/speaker.o drivers/pci.o drivers/e1000.o drivers/net.o drivers/ata.o fs/fat32.o kernel/scheduler.o kernel/process.o kernel/gdt.o kernel/gdt_asm.o kernel/usermode.o kernel/user_scheduler.o kernel/usermode_asm.o kernel/switch.o kernel/main_stack.o memory/allocator.o memory/pmm.o memory/paging.o interrupts/interrupts.o interrupts/pit.o kernel.o drivers/mouse.o
+	$(LD) -m elf_i386 -T linker.ld -nostdlib -o kernel.elf kernel_entry.o interrupts/isr.o libc/string.o drivers/vga.o drivers/keyboard.o drivers/serial.o drivers/graphics.o drivers/window.o drivers/terminal.o drivers/desktop.o drivers/term_window.o drivers/text_editor.o drivers/image_viewer.o drivers/audio_player.o drivers/speaker.o drivers/pci.o drivers/e1000.o drivers/net.o drivers/ata.o fs/fat32.o kernel/scheduler.o kernel/process.o kernel/gdt.o kernel/gdt_asm.o kernel/usermode.o kernel/user_scheduler.o kernel/usermode_asm.o kernel/switch.o kernel/main_stack.o memory/allocator.o memory/pmm.o memory/paging.o interrupts/interrupts.o interrupts/pit.o kernel.o drivers/mouse.o
 	@test $$(wc -c < kernel.bin) -le 131072 || { echo "kernel.bin too large for bootloader load window"; exit 1; }
 
 os-image.bin: boot.bin kernel.bin
@@ -118,7 +140,7 @@ fs.img: scripts/make_fat32_image.py
 	python3 scripts/make_fat32_image.py fs.img
 
 run: os-image.bin fs.img
-	$(QEMU_ENV) $(QEMU) -drive file=os-image.bin,format=raw,if=floppy -drive file=fs.img,format=raw,if=ide,index=0 -boot a -no-reboot -no-shutdown
+	$(QEMU_ENV) $(QEMU) -drive file=os-image.bin,format=raw,if=floppy -drive file=fs.img,format=raw,if=ide,index=0 $(QEMU_NET) -boot a -no-reboot -no-shutdown
 
 clean:
 	rm -f *.bin *.o libc/*.o drivers/*.o fs/*.o kernel/*.o interrupts/*.o memory/*.o os-image.bin fs.img

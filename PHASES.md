@@ -120,14 +120,28 @@
 
 ---
 
-## Phase 6 — Applications
+## Phase 6 — Applications `COMPLETE`
 
 > Built-in software ecosystem.
 
-- [ ] Terminal emulator app (window-based, full shell)
-- [ ] Text editor (open, edit, save files)
-- [ ] Image viewer (BMP support)
-- [ ] Audio player (WAV playback)
+- [x] Text editor app skeleton
+- [x] Text editor in-memory editing
+- [x] Text editor fixed-file open/save (`NOTE.TXT`)
+- [x] Text editor terminal-driven file open (`edit NAME`)
+- [x] Image viewer app skeleton
+- [x] Image viewer terminal-driven file open (`view NAME`)
+- [x] BMP test asset in FAT32 image
+- [x] Image viewer 24-bit BMP render path
+- [x] WAV test asset in FAT32 image
+- [x] Audio player app skeleton
+- [x] Audio player terminal-driven file open (`play NAME`)
+- [x] WAV metadata parser
+- [x] PC speaker driver
+- [x] Audio player PC-speaker WAV preview
+- [x] Terminal emulator app (window-based, full shell)
+- [x] Text editor (open, edit, save files)
+- [x] Image viewer (BMP support)
+- [x] Audio player (WAV playback)
 
 ---
 
@@ -135,7 +149,18 @@
 
 > Internet access.
 
-- [ ] Intel e1000 Ethernet driver (QEMU-compatible)
+- [x] PCI config-space access
+- [x] e1000 PCI discovery (QEMU-compatible)
+- [x] `net` terminal diagnostics
+- [x] Intel e1000 Ethernet driver register mapping
+- [x] e1000 MAC address readout
+- [x] e1000 transmit descriptor ring
+- [x] Raw Ethernet test-frame transmit (`net tx`)
+- [x] e1000 receive descriptor ring
+- [x] Raw receive poll diagnostics (`net rx`)
+- [x] Packet receive/transmit API
+- [x] Static QEMU user-net IPv4 identity (`10.0.2.15`)
+- [x] ARP request/reply handling (`net arp`)
 - [ ] TCP/IP stack
 - [ ] DNS resolver
 - [ ] HTTP client
@@ -163,6 +188,232 @@
 
 ---
 
+## Long-Term Roadmap — Full Open Source OS
+
+> These phases describe the bigger ambition: MinervaOS becoming a real,
+> community-built general-purpose operating system with modern visuals,
+> hardware support, applications, developer tooling, and a sustainable ecosystem.
+
+---
+
+## Phase 10 — Modern Display & Visual System
+
+> Move beyond 320x200 VGA into crisp high-resolution graphics.
+
+- [ ] VESA BIOS Extensions / linear framebuffer boot mode
+- [ ] 800x600 and 1024x768 graphics modes
+- [ ] 1280x720 HD mode
+- [ ] 1920x1080 Full HD mode
+- [ ] 24/32-bit true-color framebuffer
+- [ ] Resolution detection and mode selection
+- [ ] Scalable graphics primitives
+- [ ] Dirty-rectangle compositor
+- [ ] Alpha blending and transparency
+- [ ] Smooth window movement without full-screen redraws
+- [ ] Bitmap font loading
+- [ ] Anti-aliased font rendering
+- [ ] High-DPI aware UI scaling
+- [ ] Icon format and icon loader
+- [ ] Crisp desktop icon set
+- [ ] Window shadows and modern frame styling
+- [ ] Wallpaper image support
+- [ ] Theme engine for colors, fonts, spacing, and icons
+
+---
+
+## Phase 11 — Hardware Platform Support
+
+> Boot and run beyond the narrow QEMU demo environment.
+
+- [ ] PCI bus enumeration
+- [ ] PCI driver registry
+- [ ] ACPI table discovery
+- [ ] APIC / IOAPIC groundwork
+- [ ] Real-time clock driver
+- [ ] PS/2 compatibility cleanup
+- [ ] USB controller discovery
+- [ ] USB keyboard support
+- [ ] USB mouse support
+- [ ] AHCI / SATA storage driver
+- [ ] VirtIO block driver
+- [ ] VirtIO input support
+- [ ] Real hardware boot smoke tests
+- [ ] Hardware compatibility matrix
+
+---
+
+## Phase 12 — Real Userland & Executables
+
+> Turn ring-3 tests into a normal application/runtime model.
+
+- [ ] ELF executable loader
+- [ ] Per-process address spaces
+- [ ] User heap / brk-style allocation
+- [ ] User stack allocation
+- [ ] Process creation API
+- [ ] Process exit/wait API
+- [ ] File descriptor table
+- [ ] Standard input/output/error
+- [ ] Userland C runtime startup
+- [ ] Userland libc subset
+- [ ] Shell launches user programs
+- [ ] App bundles or executable metadata
+- [ ] Crash handling and process cleanup
+
+---
+
+## Phase 13 — System Call & POSIX-Like API
+
+> Provide stable APIs so real programs can be ported or written cleanly.
+
+- [ ] Syscall ABI versioning
+- [ ] File syscalls: open/read/write/close/stat
+- [ ] Directory syscalls: opendir/readdir/mkdir/rmdir
+- [ ] Process syscalls: spawn/exit/wait/sleep
+- [ ] Time syscalls
+- [ ] Memory syscalls: map/unmap/protect
+- [ ] Event or poll syscall
+- [ ] Pipes
+- [ ] Signals or structured process events
+- [ ] Socket syscall surface
+- [ ] Error codes and errno-compatible layer
+- [ ] POSIX compatibility decision document
+
+---
+
+## Phase 14 — Filesystem Evolution
+
+> Move from root-only FAT32 demos to a robust storage model.
+
+- [ ] FAT32 subdirectory support
+- [ ] Long filename support
+- [ ] File metadata timestamps
+- [ ] File permissions model
+- [ ] Multi-file handle write safety
+- [ ] Path resolver (`/`, `.`, `..`)
+- [ ] Mount table
+- [ ] Initrd or system volume layout
+- [ ] Larger disk images
+- [ ] Filesystem cache
+- [ ] Journaling filesystem research
+- [ ] Native Minerva filesystem design
+
+---
+
+## Phase 15 — Networking & Internet
+
+> Build from local networking to usable internet applications.
+
+- [ ] e1000 driver
+- [ ] VirtIO network driver
+- [ ] Ethernet frame layer
+- [ ] ARP
+- [ ] IPv4
+- [ ] ICMP ping
+- [ ] UDP
+- [ ] TCP
+- [ ] DHCP client
+- [ ] DNS resolver
+- [ ] HTTP client
+- [ ] TLS research path
+- [ ] Network diagnostics app
+
+---
+
+## Phase 16 — Application Platform
+
+> Make Minerva useful day-to-day, not just bootable.
+
+- [ ] Terminal app improvements
+- [ ] File manager
+- [ ] Settings app
+- [ ] Text editor polish
+- [ ] Image viewer polish
+- [ ] Audio player
+- [ ] Calculator
+- [ ] Process/task manager
+- [ ] Package browser
+- [ ] App launcher/menu
+- [ ] Clipboard
+- [ ] App preferences storage
+- [ ] Native UI toolkit
+- [ ] App SDK documentation
+
+---
+
+## Phase 17 — Browser & Web Platform
+
+> Long-term web browsing capability.
+
+- [ ] URL parser
+- [ ] HTTP integration
+- [ ] HTML tokenizer
+- [ ] DOM tree
+- [ ] Basic layout engine
+- [ ] Text rendering integration
+- [ ] Image loading
+- [ ] CSS parser
+- [ ] CSS cascade and box model
+- [ ] Forms and input controls
+- [ ] JavaScript engine research
+- [ ] Browser app shell
+
+---
+
+## Phase 18 — Security & Multi-User
+
+> Build the trust model needed for a serious open OS.
+
+- [ ] Users and groups
+- [ ] Login/session model
+- [ ] File ownership and permissions
+- [ ] Kernel/user pointer validation
+- [ ] Capability or permission model research
+- [ ] Process isolation hardening
+- [ ] Secure syscall validation
+- [ ] Random number source
+- [ ] Audit/debug logs
+- [ ] Sandboxed app model
+
+---
+
+## Phase 19 — Developer Experience & Open Source
+
+> Make the project easy to build, test, contribute to, and release.
+
+- [ ] Public contribution guide
+- [ ] Coding style guide
+- [ ] Architecture documentation
+- [ ] Build instructions for Linux/macOS/Windows/WSL
+- [ ] Automated QEMU smoke tests
+- [ ] Unit tests for libc/fs/kernel helpers
+- [ ] CI build pipeline
+- [ ] Release image generation
+- [ ] Issue and PR templates
+- [ ] Roadmap labels/milestones
+- [ ] Devlog/release notes
+- [ ] Website or project page
+- [ ] License audit
+
+---
+
+## Phase 20 — Distribution & Installer
+
+> Turn MinervaOS into something people can try and install.
+
+- [ ] Bootable ISO image
+- [ ] Boot menu
+- [ ] Live environment
+- [ ] Installer app
+- [ ] Disk partitioning support
+- [ ] Installed system layout
+- [ ] First-run setup
+- [ ] Update mechanism
+- [ ] Versioned releases
+- [ ] Recovery mode
+
+---
+
 ## Progress
 
 | Phase | Name | Status |
@@ -173,7 +424,18 @@
 | 3 | Desktop GUI | ✅ Complete |
 | 4 | Filesystem | ✅ Complete |
 | 5 | Multitasking | ✅ Complete |
-| 6 | Applications | ⬜ Not started |
+| 6 | Applications | ✅ Complete |
 | 7 | Networking | ⬜ Not started |
 | 8 | Browser | ⬜ Not started |
 | 9 | Polish & Ecosystem | ⬜ Not started |
+| 10 | Modern Display & Visual System | ⬜ Long-term |
+| 11 | Hardware Platform Support | ⬜ Long-term |
+| 12 | Real Userland & Executables | ⬜ Long-term |
+| 13 | System Call & POSIX-Like API | ⬜ Long-term |
+| 14 | Filesystem Evolution | ⬜ Long-term |
+| 15 | Networking & Internet | ⬜ Long-term |
+| 16 | Application Platform | ⬜ Long-term |
+| 17 | Browser & Web Platform | ⬜ Long-term |
+| 18 | Security & Multi-User | ⬜ Long-term |
+| 19 | Developer Experience & Open Source | ⬜ Long-term |
+| 20 | Distribution & Installer | ⬜ Long-term |

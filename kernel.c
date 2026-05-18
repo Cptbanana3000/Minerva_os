@@ -11,12 +11,17 @@
 #include "window.h"
 #include "desktop.h"
 #include "term_window.h"
+#include "text_editor.h"
+#include "image_viewer.h"
+#include "audio_player.h"
 #include "fs.h"
 #include "scheduler.h"
 #include "process.h"
 #include "gdt.h"
 #include "usermode.h"
 #include "user_scheduler.h"
+#include "e1000.h"
+#include "net.h"
 
 /* ------------------------------------------------------------------ */
 /* Globals                                                              */
@@ -49,11 +54,29 @@ static void create_about(uint8_t minimized) {
     if (minimized) window_toggle_minimize(g_about);
 }
 
+static void create_editor(void) {
+    text_editor_open_file(82, 20, "NOTE.TXT");
+}
+
+static void create_image_viewer(void) {
+    image_viewer_open_file(96, 28, "IMAGE.BMP");
+}
+
+static void create_audio_player(void) {
+    audio_player_open_file(92, 42, "AUDIO.WAV");
+}
+
 /* ------------------------------------------------------------------ */
 /* Render callback — called by desktop_redraw() after window frames    */
 /* ------------------------------------------------------------------ */
 static void render_all(void) {
     if (g_tw) term_window_render(g_tw);
+    text_editor_t *editor = text_editor_active();
+    if (editor) text_editor_render(editor);
+    image_viewer_t *viewer = image_viewer_active();
+    if (viewer) image_viewer_render(viewer);
+    audio_player_t *player = audio_player_active();
+    if (player) audio_player_render(player);
 
     /* About window content redrawn every frame (window_render erases bg) */
     if (g_about && !window_is_minimized(g_about)) {
@@ -86,6 +109,18 @@ static void open_about(void) {
     window_set_focus(g_about);
 }
 
+static void open_editor(void) {
+    create_editor();
+}
+
+static void open_image_viewer(void) {
+    create_image_viewer();
+}
+
+static void open_audio_player(void) {
+    create_audio_player();
+}
+
 static void desktop_main_loop(void) {
     while (1) {
         scheduler_poll();
@@ -94,12 +129,19 @@ static void desktop_main_loop(void) {
 
         if (keyboard_has_key()) {
             char c = keyboard_read_key();
-            /* Route keyboard to terminal window when it is focused */
             if (g_tw &&
                 window_manager_get_head() == g_tw->win &&
                 !window_is_minimized(g_tw->win)) {
                 term_window_handle_key(g_tw, c);
                 desktop_redraw();
+            } else {
+                text_editor_t *editor = text_editor_active();
+                if (editor &&
+                    window_manager_get_head() == editor->win &&
+                    !window_is_minimized(editor->win)) {
+                    text_editor_handle_key(editor, c);
+                    desktop_redraw();
+                }
             }
         }
     }
@@ -109,6 +151,21 @@ static void window_closed(window_t *win) {
     if (g_tw && win == g_tw->win) {
         g_tw->win = NULL;
         g_tw = NULL;
+    }
+
+    text_editor_t *editor = text_editor_active();
+    if (editor && win == editor->win) {
+        text_editor_window_closed(editor, win);
+    }
+
+    image_viewer_t *viewer = image_viewer_active();
+    if (viewer && win == viewer->win) {
+        image_viewer_window_closed(viewer, win);
+    }
+
+    audio_player_t *player = audio_player_active();
+    if (player && win == player->win) {
+        audio_player_window_closed(player, win);
     }
 
     if (g_about == win) {
@@ -130,6 +187,7 @@ void kernel_main(void) {
     gdt_init();
     usermode_init();
     user_scheduler_init();
+    net_init();
     int task_a = scheduler_create_kernel_task("task-a", demo_task, &g_task_a_ticks);
     if (task_a >= 0) process_create_kernel("task-a", (uint32_t)task_a, 0);
     int task_b = scheduler_create_kernel_task("task-b", demo_task, &g_task_b_ticks);
@@ -137,6 +195,7 @@ void kernel_main(void) {
     int user_sched = scheduler_create_kernel_task("user-sched", user_scheduler_task, 0);
     if (user_sched >= 0) process_create_kernel("user-sched", (uint32_t)user_sched, 0);
     serial_write("MinervaOS booting...\n");
+    e1000_init();
     if (fs_init()) {
         serial_write("FAT32 filesystem mounted\n");
     } else {
@@ -183,6 +242,9 @@ void kernel_main(void) {
     /* Desktop icons */
     desktop_add_icon(4,  8, "Term", 10, open_terminal);  /* bright green */
     desktop_add_icon(4, 40, "Info",  3, open_about);     /* cyan */
+    desktop_add_icon(4, 72, "Edit", 14, open_editor);    /* yellow */
+    desktop_add_icon(4, 104, "View", 13, open_image_viewer); /* magenta */
+    desktop_add_icon(4, 136, "Aud",  12, open_audio_player); /* red */
     STEP(8);
 
     desktop_redraw();
