@@ -28,6 +28,18 @@ typedef struct __attribute__((packed)) interrupt_frame {
 void interrupts_init(void);
 void interrupts_enable(void);
 uint32_t interrupt_handler(interrupt_frame_t* frame);
+uint32_t syscall_get_count(void);
+uint32_t syscall_get_last_eax(void);
+uint32_t syscall_get_last_cs(void);
+uint32_t syscall_get_last_result(void);
+uint32_t syscall_get_user_count(void);
+uint32_t syscall_test_interrupt(void);
+uint32_t user_fault_get_count(void);
+uint32_t user_fault_get_vector(void);
+uint32_t user_fault_get_eip(void);
+uint32_t user_fault_get_address(void);
+uint32_t user_fault_get_error(void);
+uint32_t user_fault_get_cs(void);
 
 void pit_init(uint32_t frequency_hz);
 uint32_t pit_get_ticks(void);

@@ -10,6 +10,14 @@ struct interrupt_frame;
 
 typedef void (*sched_task_fn_t)(void *ctx);
 typedef void (*sched_list_cb_t)(uint32_t id, const char *name, uint32_t runs, void *ctx);
+typedef void (*sched_context_list_cb_t)(uint32_t id,
+                                        const char *name,
+                                        uint32_t esp,
+                                        uint32_t irq_esp,
+                                        uint32_t resume_irq_esp,
+                                        uint32_t stack_base,
+                                        uint32_t stack_top,
+                                        void *ctx);
 
 void scheduler_init(void);
 int scheduler_create_kernel_task(const char *name, sched_task_fn_t entry, void *ctx);
@@ -29,6 +37,7 @@ void scheduler_set_main_switch_enabled(int enabled);
 uint32_t scheduler_main_switch_enabled(void);
 uint32_t scheduler_task_count(void);
 uint32_t scheduler_current_task_id(void);
+uint32_t scheduler_running_task_id(void);
 const char *scheduler_current_task_name(void);
 uint32_t scheduler_switch_count(void);
 uint32_t scheduler_timer_request_count(void);
@@ -44,5 +53,6 @@ uint32_t scheduler_irq_to_main_count(void);
 uint32_t scheduler_yield_to_main_count(void);
 uint32_t scheduler_last_irq_eip(void);
 void scheduler_list(sched_list_cb_t cb, void *ctx);
+void scheduler_list_contexts(sched_context_list_cb_t cb, void *ctx);
 
 #endif

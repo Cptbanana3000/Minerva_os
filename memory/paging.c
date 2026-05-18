@@ -43,6 +43,9 @@ void paging_map(uint32_t virt, uint32_t phys, uint32_t flags) {
         memset((void*)new_pt, 0, 4096);
         page_dir[pd_i] = new_pt | PAGE_PRESENT | PAGE_WRITABLE;
     }
+    if (flags & PAGE_USER) {
+        page_dir[pd_i] |= PAGE_USER;
+    }
 
     uint32_t* pt = (uint32_t*)(page_dir[pd_i] & ~0xFFFu);
     pt[pt_i] = (phys & ~0xFFFu) | (flags & 0xFFFu) | PAGE_PRESENT;

@@ -3,6 +3,8 @@
 #include "mouse.h"
 #include "interrupts.h"
 #include "scheduler.h"
+#include "gdt.h"
+#include "usermode.h"
 #include "io.h"
 #include "vga.h"
 
@@ -20,10 +22,28 @@ typedef struct __attribute__((packed)) idt_ptr {
 } idt_ptr_t;
 
 extern uint32_t isr_stub_table[];
+extern void isr128(void);
 extern void pit_tick(void);
 
 static idt_entry_t idt[256];
 static idt_ptr_t idt_descriptor;
+static uint32_t syscall_count = 0;
+static uint32_t syscall_last_eax = 0;
+static uint32_t syscall_last_cs = 0;
+static uint32_t syscall_last_result = 0;
+static uint32_t syscall_user_count = 0;
+static uint32_t user_fault_count = 0;
+static uint32_t user_fault_vector = 0;
+static uint32_t user_fault_eip = 0;
+static uint32_t user_fault_address = 0;
+static uint32_t user_fault_error = 0;
+static uint32_t user_fault_cs = 0;
+
+static uint32_t read_cr2(void) {
+    uint32_t value;
+    __asm__ volatile ("mov %%cr2, %0" : "=r"(value));
+    return value;
+}
 
 static void pic_send_eoi(uint8_t irq) {
     if (irq >= 8) {
@@ -73,6 +93,7 @@ void interrupts_init(void) {
     for (uint8_t interrupt_number = 0; interrupt_number < 48; interrupt_number++) {
         idt_set_gate(interrupt_number, isr_stub_table[interrupt_number], 0x08, 0x8E);
     }
+    idt_set_gate(0x80, (uint32_t)isr128, 0x08, 0xEE);
 
     pic_remap();
     idt_load();
@@ -80,6 +101,60 @@ void interrupts_init(void) {
 
 void interrupts_enable(void) {
     __asm__ volatile ("sti");
+}
+
+uint32_t syscall_get_count(void) {
+    return syscall_count;
+}
+
+uint32_t syscall_get_last_eax(void) {
+    return syscall_last_eax;
+}
+
+uint32_t syscall_get_last_cs(void) {
+    return syscall_last_cs;
+}
+
+uint32_t syscall_get_last_result(void) {
+    return syscall_last_result;
+}
+
+uint32_t syscall_get_user_count(void) {
+    return syscall_user_count;
+}
+
+uint32_t syscall_test_interrupt(void) {
+    uint32_t result;
+    __asm__ volatile ("int $0x80"
+                      : "=a"(result)
+                      : "a"(0x4D494E56u)
+                      : "memory");
+    syscall_last_result = result;
+    return result;
+}
+
+uint32_t user_fault_get_count(void) {
+    return user_fault_count;
+}
+
+uint32_t user_fault_get_vector(void) {
+    return user_fault_vector;
+}
+
+uint32_t user_fault_get_eip(void) {
+    return user_fault_eip;
+}
+
+uint32_t user_fault_get_address(void) {
+    return user_fault_address;
+}
+
+uint32_t user_fault_get_error(void) {
+    return user_fault_error;
+}
+
+uint32_t user_fault_get_cs(void) {
+    return user_fault_cs;
 }
 
 uint32_t interrupt_handler(interrupt_frame_t* frame) {
@@ -99,6 +174,33 @@ uint32_t interrupt_handler(interrupt_frame_t* frame) {
     if (frame->int_no == 44) {        /* IRQ12 — mouse */
         mouse_irq_handler();
         pic_send_eoi(12);
+        return 0;
+    }
+
+    if (frame->int_no == 0x80) {
+        syscall_count++;
+        syscall_last_eax = frame->eax;
+        syscall_last_cs = frame->cs;
+        if ((frame->cs & 3u) == 3u && frame->eax == USERMODE_TEST_MAGIC) {
+            syscall_user_count++;
+            frame->eip = (uint32_t)usermode_syscall_return;
+            frame->cs = GDT_KERNEL_CODE;
+            frame->eflags &= ~0x200u;
+        }
+        frame->eax = syscall_count;
+        return 0;
+    }
+
+    if (frame->int_no == 14 && (frame->cs & 3u) == 3u) {
+        user_fault_count++;
+        user_fault_vector = frame->int_no;
+        user_fault_eip = frame->eip;
+        user_fault_address = read_cr2();
+        user_fault_error = frame->err_code;
+        user_fault_cs = frame->cs;
+        frame->eip = (uint32_t)usermode_fault_return;
+        frame->cs = GDT_KERNEL_CODE;
+        frame->eflags &= ~0x200u;
         return 0;
     }
 

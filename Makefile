@@ -4,6 +4,9 @@
 CC      = gcc
 LD      = ld
 ASM     = nasm
+QEMU    = qemu-system-i386
+QEMU_PATH = /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+QEMU_ENV = env -i HOME="$(HOME)" USER="$(USER)" PATH="$(QEMU_PATH)" DISPLAY="$(DISPLAY)" WAYLAND_DISPLAY="$(WAYLAND_DISPLAY)" XAUTHORITY="$(XAUTHORITY)" XDG_RUNTIME_DIR="$(XDG_RUNTIME_DIR)" DBUS_SESSION_BUS_ADDRESS="$(DBUS_SESSION_BUS_ADDRESS)"
 
 CFLAGS  = -m32 -Os -ffreestanding -fno-pie -fno-stack-protector -nostdlib -Wall -Wextra -c
 LDFLAGS = -m elf_i386 -T linker.ld --oformat binary -nostdlib
@@ -47,7 +50,7 @@ drivers/ata.o: drivers/ata.c include/ata.h include/io.h
 drivers/desktop.o: drivers/desktop.c include/desktop.h include/graphics.h include/window.h include/mouse.h
 	$(CC) $(CFLAGS) $(INCLUDES) drivers/desktop.c -o drivers/desktop.o
 
-drivers/term_window.o: drivers/term_window.c include/term_window.h include/window.h include/graphics.h include/libc.h include/serial.h include/pmm.h include/io.h include/fs.h include/scheduler.h
+drivers/term_window.o: drivers/term_window.c include/term_window.h include/window.h include/graphics.h include/libc.h include/serial.h include/pmm.h include/io.h include/fs.h include/scheduler.h include/process.h include/gdt.h include/interrupts.h include/usermode.h include/user_scheduler.h
 	$(CC) $(CFLAGS) $(INCLUDES) drivers/term_window.c -o drivers/term_window.o
 
 fs/fat32.o: fs/fat32.c include/fs.h include/ata.h include/libc.h
@@ -55,6 +58,24 @@ fs/fat32.o: fs/fat32.c include/fs.h include/ata.h include/libc.h
 
 kernel/scheduler.o: kernel/scheduler.c include/scheduler.h include/libc.h
 	$(CC) $(CFLAGS) $(INCLUDES) kernel/scheduler.c -o kernel/scheduler.o
+
+kernel/process.o: kernel/process.c include/process.h include/libc.h
+	$(CC) $(CFLAGS) $(INCLUDES) kernel/process.c -o kernel/process.o
+
+kernel/gdt.o: kernel/gdt.c include/gdt.h include/libc.h
+	$(CC) $(CFLAGS) $(INCLUDES) kernel/gdt.c -o kernel/gdt.o
+
+kernel/gdt_asm.o: kernel/gdt.asm
+	$(ASM) -f elf32 kernel/gdt.asm -o kernel/gdt_asm.o
+
+kernel/usermode.o: kernel/usermode.c include/usermode.h include/paging.h
+	$(CC) $(CFLAGS) $(INCLUDES) kernel/usermode.c -o kernel/usermode.o
+
+kernel/user_scheduler.o: kernel/user_scheduler.c include/user_scheduler.h include/process.h include/usermode.h include/interrupts.h include/scheduler.h
+	$(CC) $(CFLAGS) $(INCLUDES) kernel/user_scheduler.c -o kernel/user_scheduler.o
+
+kernel/usermode_asm.o: kernel/usermode.asm
+	$(ASM) -f elf32 kernel/usermode.asm -o kernel/usermode_asm.o
 
 kernel/switch.o: kernel/switch.asm
 	$(ASM) -f elf32 kernel/switch.asm -o kernel/switch.o
@@ -71,21 +92,21 @@ memory/pmm.o: memory/pmm.c include/pmm.h
 memory/paging.o: memory/paging.c include/paging.h include/pmm.h include/libc.h
 	$(CC) $(CFLAGS) $(INCLUDES) memory/paging.c -o memory/paging.o
 
-interrupts/interrupts.o: interrupts/interrupts.c include/interrupts.h include/io.h include/vga.h
+interrupts/interrupts.o: interrupts/interrupts.c include/interrupts.h include/io.h include/vga.h include/gdt.h include/usermode.h
 	$(CC) $(CFLAGS) $(INCLUDES) interrupts/interrupts.c -o interrupts/interrupts.o
 
 interrupts/pit.o: interrupts/pit.c include/interrupts.h include/io.h include/scheduler.h
 	$(CC) $(CFLAGS) $(INCLUDES) interrupts/pit.c -o interrupts/pit.o
 
-kernel.o: kernel.c include/io.h include/keyboard.h include/interrupts.h include/libc.h include/memory.h include/serial.h include/graphics.h include/window.h include/desktop.h include/term_window.h include/mouse.h include/pmm.h include/paging.h include/fs.h include/scheduler.h
+kernel.o: kernel.c include/io.h include/keyboard.h include/interrupts.h include/libc.h include/memory.h include/serial.h include/graphics.h include/window.h include/desktop.h include/term_window.h include/mouse.h include/pmm.h include/paging.h include/fs.h include/scheduler.h include/process.h include/gdt.h include/usermode.h include/user_scheduler.h
 	$(CC) $(CFLAGS) $(INCLUDES) kernel.c -o kernel.o
 
 interrupts/isr.o: interrupts/isr.asm
 	$(ASM) -f elf32 interrupts/isr.asm -o interrupts/isr.o
 
-kernel.bin: kernel_entry.o interrupts/isr.o libc/string.o drivers/vga.o drivers/keyboard.o drivers/serial.o drivers/graphics.o drivers/window.o drivers/terminal.o drivers/desktop.o drivers/term_window.o drivers/ata.o fs/fat32.o kernel/scheduler.o kernel/switch.o kernel/main_stack.o memory/allocator.o memory/pmm.o memory/paging.o interrupts/interrupts.o interrupts/pit.o kernel.o linker.ld drivers/mouse.o
-	$(LD) $(LDFLAGS) -o kernel.bin kernel_entry.o interrupts/isr.o libc/string.o drivers/vga.o drivers/keyboard.o drivers/serial.o drivers/graphics.o drivers/window.o drivers/terminal.o drivers/desktop.o drivers/term_window.o drivers/ata.o fs/fat32.o kernel/scheduler.o kernel/switch.o kernel/main_stack.o memory/allocator.o memory/pmm.o memory/paging.o interrupts/interrupts.o interrupts/pit.o kernel.o drivers/mouse.o
-	$(LD) -m elf_i386 -T linker.ld -nostdlib -o kernel.elf kernel_entry.o interrupts/isr.o libc/string.o drivers/vga.o drivers/keyboard.o drivers/serial.o drivers/graphics.o drivers/window.o drivers/terminal.o drivers/desktop.o drivers/term_window.o drivers/ata.o fs/fat32.o kernel/scheduler.o kernel/switch.o kernel/main_stack.o memory/allocator.o memory/pmm.o memory/paging.o interrupts/interrupts.o interrupts/pit.o kernel.o drivers/mouse.o
+kernel.bin: kernel_entry.o interrupts/isr.o libc/string.o drivers/vga.o drivers/keyboard.o drivers/serial.o drivers/graphics.o drivers/window.o drivers/terminal.o drivers/desktop.o drivers/term_window.o drivers/ata.o fs/fat32.o kernel/scheduler.o kernel/process.o kernel/gdt.o kernel/gdt_asm.o kernel/usermode.o kernel/user_scheduler.o kernel/usermode_asm.o kernel/switch.o kernel/main_stack.o memory/allocator.o memory/pmm.o memory/paging.o interrupts/interrupts.o interrupts/pit.o kernel.o linker.ld drivers/mouse.o
+	$(LD) $(LDFLAGS) -o kernel.bin kernel_entry.o interrupts/isr.o libc/string.o drivers/vga.o drivers/keyboard.o drivers/serial.o drivers/graphics.o drivers/window.o drivers/terminal.o drivers/desktop.o drivers/term_window.o drivers/ata.o fs/fat32.o kernel/scheduler.o kernel/process.o kernel/gdt.o kernel/gdt_asm.o kernel/usermode.o kernel/user_scheduler.o kernel/usermode_asm.o kernel/switch.o kernel/main_stack.o memory/allocator.o memory/pmm.o memory/paging.o interrupts/interrupts.o interrupts/pit.o kernel.o drivers/mouse.o
+	$(LD) -m elf_i386 -T linker.ld -nostdlib -o kernel.elf kernel_entry.o interrupts/isr.o libc/string.o drivers/vga.o drivers/keyboard.o drivers/serial.o drivers/graphics.o drivers/window.o drivers/terminal.o drivers/desktop.o drivers/term_window.o drivers/ata.o fs/fat32.o kernel/scheduler.o kernel/process.o kernel/gdt.o kernel/gdt_asm.o kernel/usermode.o kernel/user_scheduler.o kernel/usermode_asm.o kernel/switch.o kernel/main_stack.o memory/allocator.o memory/pmm.o memory/paging.o interrupts/interrupts.o interrupts/pit.o kernel.o drivers/mouse.o
 	@test $$(wc -c < kernel.bin) -le 131072 || { echo "kernel.bin too large for bootloader load window"; exit 1; }
 
 os-image.bin: boot.bin kernel.bin
@@ -97,9 +118,7 @@ fs.img: scripts/make_fat32_image.py
 	python3 scripts/make_fat32_image.py fs.img
 
 run: os-image.bin fs.img
-	cp os-image.bin /mnt/c/Users/joell/Downloads/os-image.bin
-	cp fs.img /mnt/c/Users/joell/Downloads/minerva-fs.img
-	powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "& 'C:\Program Files\qemu\qemu-system-i386.exe' -drive file='C:\Users\joell\Downloads\os-image.bin',format=raw,if=floppy -drive file='C:\Users\joell\Downloads\minerva-fs.img',format=raw,if=ide,index=0 -boot a -no-reboot -no-shutdown"
+	$(QEMU_ENV) $(QEMU) -drive file=os-image.bin,format=raw,if=floppy -drive file=fs.img,format=raw,if=ide,index=0 -boot a -no-reboot -no-shutdown
 
 clean:
 	rm -f *.bin *.o libc/*.o drivers/*.o fs/*.o kernel/*.o interrupts/*.o memory/*.o os-image.bin fs.img

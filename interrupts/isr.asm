@@ -49,6 +49,7 @@
 [GLOBAL isr45]
 [GLOBAL isr46]
 [GLOBAL isr47]
+[GLOBAL isr128]
 
 [EXTERN interrupt_handler]
 
@@ -123,6 +124,7 @@ ISR_NO_ERROR 44
 ISR_NO_ERROR 45
 ISR_NO_ERROR 46
 ISR_NO_ERROR 47
+ISR_NO_ERROR 128
 
 isr_common_stub:
     push ds

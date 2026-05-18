@@ -83,7 +83,7 @@
 
 ---
 
-## Phase 5 — Multitasking `IN PROGRESS`
+## Phase 5 — Multitasking `COMPLETE`
 
 > Multiple processes running concurrently.
 
@@ -105,9 +105,18 @@
 - [x] Dedicated kernel stack for the desktop main loop
 - [x] Atomic main↔task IRQ round-trip
 - [x] Preemptive round-robin scheduler
-- [ ] Process table
-- [ ] Context switching (save/restore CPU state)
-- [ ] Ring 3 userland (privilege separation)
+- [x] Process table
+- [x] Context switching (save/restore CPU state)
+- [x] GDT/TSS user-mode groundwork
+- [x] Syscall interrupt gate
+- [x] Controlled ring 3 entry test
+- [x] User process metadata
+- [x] User context metadata
+- [x] Prepared user process runner
+- [x] Scheduler-owned user launch
+- [x] Restartable user launch diagnostics
+- [x] User-mode page fault recovery
+- [x] Ring 3 userland (privilege separation)
 
 ---
 
@@ -163,7 +172,7 @@
 | 2 | Memory | ✅ Complete |
 | 3 | Desktop GUI | ✅ Complete |
 | 4 | Filesystem | ✅ Complete |
-| 5 | Multitasking | 🚧 In progress |
+| 5 | Multitasking | ✅ Complete |
 | 6 | Applications | ⬜ Not started |
 | 7 | Networking | ⬜ Not started |
 | 8 | Browser | ⬜ Not started |

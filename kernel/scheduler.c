@@ -4,13 +4,21 @@
 #include "libc.h"
 
 typedef struct {
+    uint32_t esp;
+    uint32_t irq_esp;
+    uint32_t resume_irq_esp;
+    uint32_t stack_base;
+    uint32_t stack_top;
+    uint32_t irq_stack_base;
+    uint32_t irq_stack_top;
+} sched_context_t;
+
+typedef struct {
     uint32_t id;
     const char *name;
     sched_task_fn_t entry;
     void *ctx;
-    uint32_t esp;
-    uint32_t irq_esp;
-    uint32_t resume_irq_esp;
+    sched_context_t context;
     uint32_t runs;
     uint8_t active;
 } sched_task_t;
@@ -21,7 +29,6 @@ static uint32_t irq_stacks[SCHED_MAX_TASKS][256];
 static uint32_t main_stack[2048] __attribute__((aligned(16)));
 static uint32_t task_count = 0;
 static int current_task = -1;
-static uint32_t main_esp = 0;
 static uint32_t ticks_in_quantum = 0;
 static uint32_t switch_count = 0;
 static uint32_t timer_request_count = 0;
@@ -87,7 +94,7 @@ static uint32_t make_resume_irq_esp(uint32_t id) {
         (interrupt_frame_t*)(irq_stacks[id] + 256) - 1;
 
     memset(frame, 0, sizeof(interrupt_frame_t));
-    frame->eax = tasks[id].esp;
+    frame->eax = tasks[id].context.esp;
     frame->gs = 0x10;
     frame->fs = 0x10;
     frame->es = 0x10;
@@ -108,7 +115,7 @@ static int scheduler_next_active_irq_task(void) {
         if (next >= (int)task_count) next = 0;
 
         if (next == current_task) continue;
-        if (tasks[next].active && tasks[next].irq_esp) {
+        if (tasks[next].active && tasks[next].context.irq_esp) {
             return next;
         }
     }
@@ -122,7 +129,6 @@ void scheduler_init(void) {
     memset(irq_stacks, 0, sizeof(irq_stacks));
     task_count = 0;
     current_task = -1;
-    main_esp = 0;
     ticks_in_quantum = 0;
     switch_count = 0;
     timer_request_count = 0;
@@ -154,9 +160,13 @@ int scheduler_create_kernel_task(const char *name, sched_task_fn_t entry, void *
     tasks[id].name = name;
     tasks[id].entry = entry;
     tasks[id].ctx = ctx;
-    tasks[id].esp = make_initial_esp(id);
-    tasks[id].resume_irq_esp = make_resume_irq_esp(id);
-    tasks[id].irq_esp = tasks[id].resume_irq_esp;
+    tasks[id].context.stack_base = (uint32_t)task_stacks[id];
+    tasks[id].context.stack_top = (uint32_t)(task_stacks[id] + 256);
+    tasks[id].context.irq_stack_base = (uint32_t)irq_stacks[id];
+    tasks[id].context.irq_stack_top = (uint32_t)(irq_stacks[id] + 256);
+    tasks[id].context.esp = make_initial_esp(id);
+    tasks[id].context.resume_irq_esp = make_resume_irq_esp(id);
+    tasks[id].context.irq_esp = tasks[id].context.resume_irq_esp;
     tasks[id].runs = 0;
     tasks[id].active = 1;
     irq_context_count++;
@@ -174,9 +184,13 @@ int scheduler_register_main_task(const char *name) {
     tasks[id].name = name;
     tasks[id].entry = 0;
     tasks[id].ctx = 0;
-    tasks[id].esp = 0;
-    tasks[id].irq_esp = 0;
-    tasks[id].resume_irq_esp = 0;
+    tasks[id].context.esp = 0;
+    tasks[id].context.irq_esp = 0;
+    tasks[id].context.resume_irq_esp = 0;
+    tasks[id].context.stack_base = scheduler_main_stack_base();
+    tasks[id].context.stack_top = scheduler_main_stack_top();
+    tasks[id].context.irq_stack_base = 0;
+    tasks[id].context.irq_stack_top = 0;
     tasks[id].runs = 0;
     tasks[id].active = 1;
     task_count++;
@@ -244,7 +258,7 @@ uint32_t scheduler_on_timer_interrupt(const struct interrupt_frame *frame) {
            runs on its own dedicated stack and is about to be paused), then
            hand control to the chosen task in the same ISR call. */
         sched_debug_marker = 0x11110000u | (uint32_t)next;
-        tasks[main_task_id].irq_esp = (uint32_t)frame;
+        tasks[main_task_id].context.irq_esp = (uint32_t)frame;
         main_paused_via_irq = 1;
         switch_pending = 0;
         current_task = next;
@@ -252,7 +266,7 @@ uint32_t scheduler_on_timer_interrupt(const struct interrupt_frame *frame) {
         switch_count++;
         irq_preempt_switch_count++;
         main_to_task_count++;
-        return tasks[next].irq_esp;
+        return tasks[next].context.irq_esp;
     }
 
     if (current_task < 0 || !tasks[current_task].active) {
@@ -263,11 +277,11 @@ uint32_t scheduler_on_timer_interrupt(const struct interrupt_frame *frame) {
     /* IRQ fired in a kernel task. Save its frame and switch to next, which
        may be another task or the (paused-via-IRQ) main loop. */
     switch_pending = 0;
-    tasks[current_task].irq_esp = (uint32_t)frame;
-    uint32_t resume_esp = tasks[next].irq_esp;
+    tasks[current_task].context.irq_esp = (uint32_t)frame;
+    uint32_t resume_esp = tasks[next].context.irq_esp;
     if (next == main_task_id) {
         sched_debug_marker = 0x22220000u | (uint32_t)current_task;
-        tasks[main_task_id].irq_esp = 0;
+        tasks[main_task_id].context.irq_esp = 0;
         main_paused_via_irq = 0;
         in_task = 0;
         irq_to_main_count++;
@@ -292,7 +306,8 @@ void scheduler_poll(void) {
             current_task = next;
             switch_count++;
             in_task = 1;
-            scheduler_context_switch(&main_esp, tasks[current_task].esp);
+            uint32_t *main_esp_slot = &tasks[main_task_id].context.esp;
+            scheduler_context_switch(main_esp_slot, tasks[current_task].context.esp);
             in_task = 0;
             return;
         }
@@ -302,8 +317,8 @@ void scheduler_poll(void) {
 void scheduler_yield(void) {
     if (!in_task || current_task < 0) return;
 
-    if (main_paused_via_irq && main_task_id >= 0 && tasks[main_task_id].irq_esp) {
-        /* Main was paused by an IRQ, so its cooperative main_esp is stale.
+    if (main_paused_via_irq && main_task_id >= 0 && tasks[main_task_id].context.irq_esp) {
+        /* Main was paused by an IRQ, so its cooperative ESP is stale.
            Return to main via iret on its saved interrupt frame. IRQs must
            stay off across the bookkeeping → switch — otherwise a PIT tick
            in this window would see in_task=0 and misclassify the task
@@ -311,23 +326,24 @@ void scheduler_yield(void) {
            re-enables them by popping main's captured EFLAGS. */
         __asm__ volatile ("cli");
         int old_task = current_task;
-        uint32_t main_iret_esp = tasks[main_task_id].irq_esp;
+        uint32_t main_iret_esp = tasks[main_task_id].context.irq_esp;
         sched_debug_marker = 0x44440000u | (uint32_t)old_task;
-        tasks[old_task].irq_esp = tasks[old_task].resume_irq_esp;
-        tasks[main_task_id].irq_esp = 0;
+        tasks[old_task].context.irq_esp = tasks[old_task].context.resume_irq_esp;
+        tasks[main_task_id].context.irq_esp = 0;
         main_paused_via_irq = 0;
         current_task = main_task_id;
         in_task = 0;
         yield_to_main_count++;
-        scheduler_context_switch_iret_update_irq(&tasks[old_task].esp,
-                                                 tasks[old_task].resume_irq_esp,
+        scheduler_context_switch_iret_update_irq(&tasks[old_task].context.esp,
+                                                 tasks[old_task].context.resume_irq_esp,
                                                  main_iret_esp);
         return;
     }
 
-    scheduler_context_switch_update_irq(&tasks[current_task].esp,
-                                        tasks[current_task].resume_irq_esp,
-                                        main_esp);
+    if (main_task_id < 0) return;
+    scheduler_context_switch_update_irq(&tasks[current_task].context.esp,
+                                        tasks[current_task].context.resume_irq_esp,
+                                        tasks[main_task_id].context.esp);
 }
 
 void scheduler_set_preemptive_enabled(int enabled) {
@@ -351,6 +367,12 @@ uint32_t scheduler_task_count(void) {
 }
 
 uint32_t scheduler_current_task_id(void) {
+    if (current_task < 0) return 0xFFFFFFFFu;
+    return (uint32_t)current_task;
+}
+
+uint32_t scheduler_running_task_id(void) {
+    if (!in_task && main_task_id >= 0) return (uint32_t)main_task_id;
     if (current_task < 0) return 0xFFFFFFFFu;
     return (uint32_t)current_task;
 }
@@ -417,5 +439,22 @@ void scheduler_list(sched_list_cb_t cb, void *ctx) {
 
     for (uint32_t i = 0; i < task_count; i++) {
         if (tasks[i].active) cb(tasks[i].id, tasks[i].name, tasks[i].runs, ctx);
+    }
+}
+
+void scheduler_list_contexts(sched_context_list_cb_t cb, void *ctx) {
+    if (!cb) return;
+
+    for (uint32_t i = 0; i < task_count; i++) {
+        if (tasks[i].active) {
+            cb(tasks[i].id,
+               tasks[i].name,
+               tasks[i].context.esp,
+               tasks[i].context.irq_esp,
+               tasks[i].context.resume_irq_esp,
+               tasks[i].context.stack_base,
+               tasks[i].context.stack_top,
+               ctx);
+        }
     }
 }

@@ -1,8 +1,7 @@
 # MinervaOS Progress Log
 
-This file records how MinervaOS is growing, especially the filesystem work in
-Phase 4. `PHASES.md` is the checklist; this log explains the path, the safety
-rules, and the tests used along the way.
+This file records how MinervaOS is growing. `PHASES.md` is the checklist; this
+log explains the path, the safety rules, and the tests used along the way.
 
 ---
 
@@ -13,8 +12,13 @@ bootloader, switches to protected mode, enters VGA mode 13h, and runs a small
 graphical desktop with windows, icons, a taskbar, mouse input, keyboard input,
 serial logging, a heap allocator, paging, and a terminal window.
 
-Phase 4 is now complete: persistent FAT32 storage supports list, read, create,
+Phase 4 is complete: persistent FAT32 storage supports list, read, create,
 write, append, truncate, delete, and rename for root-directory 8.3 files.
+
+Phase 5 is complete: the kernel has scheduler-owned kernel tasks, a process
+table, preemptive round-robin switching for kernel tasks, GDT/TSS-backed ring-3
+entry, syscall return to kernel, scheduler-owned user launches, and a recovered
+user-mode page-fault proof that demonstrates privilege separation.
 
 ---
 
@@ -475,9 +479,9 @@ cat OLD.TXT
 
 ---
 
-## Next Likely Step
+## Phase 5 Multitasking Growth
 
-Phase 4 is complete. Phase 5 has begun with a non-invasive scheduler skeleton:
+Phase 5 grew from a non-invasive scheduler skeleton into protected userland:
 
 - `scheduler_init()` sets up an in-kernel task table.
 - `scheduler_create_kernel_task()` registers kernel tasks.
@@ -519,6 +523,87 @@ Phase 4 is complete. Phase 5 has begun with a non-invasive scheduler skeleton:
   candidate picker. It appears in `tasks` purely as bookkeeping. `scheduler_poll`
   was reworked into a bounded skip-loop so the entry-less main slot is never a
   context-switch target.
+- A separate kernel process table now exists as the first non-invasive process
+  model slice. Existing scheduler slots for `task-a`, `task-b`, and `desktop`
+  are registered as kernel processes with PIDs, parent PIDs, linked task IDs,
+  names, and states. The terminal `ps` command lists those records while the
+  scheduler behavior remains unchanged.
+- `ps` now derives the displayed `run` state from the scheduler's effective
+  running slot. When the desktop loop is active outside a kernel task, the
+  desktop process is shown as running; when IRQ preemption is inside a demo
+  task, that task is shown as running.
+- Scheduler CPU state is now grouped into an explicit per-task context object:
+  cooperative ESP, IRQ-frame ESP, synthetic resume IRQ-frame ESP, and stack
+  bounds live together instead of as loose task fields. The desktop main loop's
+  cooperative ESP now lives in its scheduler context too, replacing the old
+  standalone `main_esp`. The terminal `ctx` command lists compact context
+  pointers (`ID ESP IRQ`) for smoke testing. This completes the kernel-task
+  context-switching checklist item; ring 3/TSS/user privilege work remains
+  separate.
+- User-mode groundwork has begun without jumping to ring 3 yet. The kernel now
+  installs its own GDT after entering C, preserving kernel code/data selectors
+  while adding ring-3 code/data descriptors and a 32-bit TSS descriptor. `ltr`
+  loads the TSS with `ss0=0x10` and a dedicated kernel `esp0`, ready for future
+  privilege transitions. The terminal `tss` command reports user selectors,
+  TSS selector, loaded state, `ss0`, and `esp0`.
+- Syscall interrupt plumbing is now present before any ring-3 jump. Vector
+  `0x80` has its own ISR stub and is installed as a DPL 3 IDT gate, so future
+  user code can legally call it. The handler currently records a syscall count
+  and the incoming EAX value, then returns the count in EAX. The terminal
+  `syscall` command shows the counters, and `syscall test` invokes `int 0x80`
+  from kernel mode as a safe first proof.
+- A controlled ring-3 entry test now exists behind the terminal `usertest`
+  command. The helper saves the current kernel ESP, builds an iret frame with
+  `CS=0x1B` and `SS=0x23`, enters a tiny user stub, and the stub calls
+  `int 0x80` with EAX=`0x55534552` (`USER`). The syscall handler records the
+  user CS/EAX, rewrites the saved interrupt frame to a kernel landing pad,
+  and returns to the original terminal stack. This proves the ring transition
+  and syscall path without abandoning the desktop.
+- The first `usertest` attempt exposed the expected paging boundary: the
+  identity map was supervisor-only, so ring 3 faulted as soon as it tried to
+  fetch the test stub. The test code now lives in a page-aligned `.usertext`
+  section and the test stack is page-aligned too; `usermode_init()` maps only
+  those pages with `PAGE_USER`, leaving the rest of the kernel supervisor-only.
+- The process table now distinguishes kernel and user processes. `ps` shows a
+  compact `ker` / `usr` kind column, and a successful `usertest` upserts one
+  `usertest` user-process record with no scheduler task ID, the user entry
+  address, user stack top, syscall count, and a completed/zombie state. The
+  terminal `uproc` command prints the user-process metadata without making
+  ring-3 code schedulable yet.
+- User-process metadata is now grouped as an explicit user context:
+  EIP, ESP, CS, SS, EFLAGS, last syscall EAX/CS, and syscall count. `usertest`
+  fills this context after returning through the syscall path. The terminal
+  `uctx` command prints the saved user interrupt-frame shape that future
+  schedulable user tasks will restore.
+- User contexts can now be prepared and run as process-table state. `userprep`
+  creates a READY `usertest` user process without entering ring 3. `userrun`
+  loads that saved context, enters ring 3 through the generic context runner,
+  returns through `int 0x80`, and marks the user process ZOMBIE afterward.
+  This still avoids scheduler integration, but the process table is now the
+  source of truth for launching the ring-3 test.
+- User launch is now scheduler-owned without being timer-preempted directly.
+  A `user-sched` kernel task sits in the normal scheduler task table and stays
+  idle until armed. The terminal `usersched` command arms it; on its next
+  scheduler turn it finds a READY user process, marks it RUNNING, enters ring 3
+  through the saved context, returns through the syscall landing pad, and marks
+  the process ZOMBIE. The launcher temporarily lowers the IRQ preemption gate
+  while it is inside the ring-3 test, so this does not yet imply timer-preempted
+  userland. `usched` reports the launcher task's armed/runs/launch counters
+  plus the last PID/result, so this path can be tested independently from the
+  older direct `userrun` command.
+- The scheduler-owned user launch is now restartable and easier to diagnose.
+  `userreset` rebuilds the saved `usertest` ring-3 context and marks it READY
+  again after a completed run. `usersched` refuses cleanly when no READY user
+  process exists, and `usched` now reports `NoReady` alongside idle and launch
+  counters so failed arm attempts are visible without inspecting code.
+- User-mode fault recovery now proves the first hard privilege boundary. A new
+  ring-3 `userfault` stub deliberately reads from supervisor-only kernel memory
+  at `0x00008000`. The page-fault handler recognizes `#PF` from CPL 3, captures
+  the fault vector, faulting EIP, CR2 address, error code, and user CS, rewrites
+  the saved frame to a kernel landing pad, and returns to the terminal instead
+  of using the fatal crash screen. The `userfault` command runs this proof and
+  records a `userfault` process as ZOMBIE with fault metadata; `ufault` prints
+  the last captured user fault directly.
 - IRQ0 now captures the main loop's interrupt frame into a dedicated
   `main_captured_esp` static (separate from `tasks[main].irq_esp`) and bumps a
   `main_capture_count` counter, each time a timer tick fires while the main loop
@@ -713,3 +798,34 @@ MSw:1
 This confirms the main↔task IRQ round-trip is stable enough to mark the
 preemptive round-robin scheduler checklist item complete. The gates remain in
 place for controlled testing while the next Phase 5 pieces are built.
+
+## Phase 5 Completion
+
+Phase 5 is now complete. The final userland smoke tests are:
+
+```text
+userprep
+usersched
+usched
+ps
+uctx
+userreset
+usersched
+usched
+userfault
+ufault
+```
+
+Expected results:
+
+- `usersched` launches a READY `usertest` through the `user-sched` kernel task.
+- `ps` shows `usertest` returning to `zombie` after launch.
+- `uctx` shows the ring-3 context with user selectors (`CS=0x1B`, `SS=0x23`).
+- `userfault` returns to the terminal instead of the fatal crash screen.
+- `ufault` reports vector 14, user CS `0x1B`, CR2 address `0x00008000`, and a
+  page-fault error code indicating a user-mode access to a present supervisor
+  page.
+
+This proves the Phase 5 boundary: user code can run in ring 3 and call into the
+kernel through `int 0x80`, while supervisor-only kernel pages remain protected
+and recoverable user faults are captured as process metadata.

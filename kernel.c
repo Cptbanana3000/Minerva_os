@@ -13,6 +13,10 @@
 #include "term_window.h"
 #include "fs.h"
 #include "scheduler.h"
+#include "process.h"
+#include "gdt.h"
+#include "usermode.h"
+#include "user_scheduler.h"
 
 /* ------------------------------------------------------------------ */
 /* Globals                                                              */
@@ -121,9 +125,17 @@ void kernel_main(void) {
     paging_init();
     heap_init();
     serial_init();
+    process_init();
     scheduler_init();
-    scheduler_create_kernel_task("task-a", demo_task, &g_task_a_ticks);
-    scheduler_create_kernel_task("task-b", demo_task, &g_task_b_ticks);
+    gdt_init();
+    usermode_init();
+    user_scheduler_init();
+    int task_a = scheduler_create_kernel_task("task-a", demo_task, &g_task_a_ticks);
+    if (task_a >= 0) process_create_kernel("task-a", (uint32_t)task_a, 0);
+    int task_b = scheduler_create_kernel_task("task-b", demo_task, &g_task_b_ticks);
+    if (task_b >= 0) process_create_kernel("task-b", (uint32_t)task_b, 0);
+    int user_sched = scheduler_create_kernel_task("user-sched", user_scheduler_task, 0);
+    if (user_sched >= 0) process_create_kernel("user-sched", (uint32_t)user_sched, 0);
     serial_write("MinervaOS booting...\n");
     if (fs_init()) {
         serial_write("FAT32 filesystem mounted\n");
@@ -176,7 +188,8 @@ void kernel_main(void) {
     desktop_redraw();
 #undef STEP
 
-    scheduler_register_main_task("desktop");
+    int desktop_task = scheduler_register_main_task("desktop");
+    if (desktop_task >= 0) process_create_kernel("desktop", (uint32_t)desktop_task, 0);
 
     /* Switch to a dedicated kernel stack for the desktop event loop and
        jump into it. Never returns — boot stack is abandoned past this point. */
