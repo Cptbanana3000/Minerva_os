@@ -540,13 +540,176 @@ Phase 4 is complete. Phase 5 has begun with a non-invasive scheduler skeleton:
   to while main is paused. Verified in QEMU: desktop, terminal, window drag,
   and the `tasks` / `preempt on` counters all behave identically.
 
-This is still cooperative rather than preemptive, but it now performs real
-kernel-stack switching. Timer interrupts request scheduling; the main loop still
-performs the actual switch safely outside the IRQ handler.
+The preemptive round-robin slice is now working behind runtime gates. When
+`preempt on` and `mainsw on` are enabled, IRQ0 can atomically capture the
+desktop main loop's interrupt frame, switch to a kernel task inside the same
+ISR return path, and later return safely to the paused main loop. The terminal
+`tasks` command reports the round-trip counters:
 
-The next safe Phase 5 slice is atomic capture-and-switch: when IRQ0 fires in
-the main loop AND there is a task to run, save the main frame into
-`tasks[main].irq_esp` and switch to the chosen task in the SAME ISR call (not
-deferred). Because main is now on its own stack, the saved frame stays valid
-while main is paused, and the existing task→task IRQ switch machinery can
-then ferry execution back to main on a later tick.
+```text
+M->T
+Y->M
+```
+
+Manual QEMU verification showed both counters advancing in lockstep while
+`task-a` and `task-b` run counts increased, with no crash screen.
+
+---
+
+## Phase 5 Bug Fixed — Atomic Main↔Task Round-Trip Crash
+
+The atomic capture-and-switch path was implemented, gated behind a new
+`mainsw on` / `mainsw off` shell command (default off). The first version
+deterministically triggered a General Protection Fault within a tick or two.
+That crash is fixed; this section records the failure and the repair.
+
+### What was added
+
+- `kernel/switch.asm`: `scheduler_context_switch_iret(old_esp, new_esp)` — same
+  cooperative-save semantics as `scheduler_context_switch` for the yielding
+  side, but `new_esp` must point at a valid `interrupt_frame_t`; the routine
+  executes the ISR epilogue inline (`popa; pop ds/es/fs/gs; add esp,8; iretd`)
+  to land in whatever context that frame represents.
+- `kernel/switch.asm`: `scheduler_resume_from_saved_esp` and update variants
+  of the cooperative and iret switch helpers. These keep each task's synthetic
+  IRQ resume frame pointed at the latest saved cooperative ESP.
+- `kernel/scheduler.c`:
+  - `main_switch_enabled` runtime gate (`mainsw on` / `mainsw off`); default 0.
+  - `main_paused_via_irq` flag tracking whether main was IRQ-paused vs.
+    cooperatively-paused.
+  - `resume_irq_esp` per task, backed by the existing `irq_stacks[]` storage.
+    Synthetic IRQ frames now enter `scheduler_resume_from_saved_esp` instead of
+    entering the C trampoline directly on the small IRQ frame tail.
+  - `scheduler_next_active_irq_task` widened to consider any active slot with
+    a non-zero `irq_esp` (including the main slot once it is paused-via-IRQ),
+    and tightened to skip the current slot to avoid self-pick.
+  - `scheduler_on_timer_interrupt` split into two branches: the `!in_task`
+    branch atomically captures main's frame into `tasks[main].irq_esp` and
+    switches to a chosen task; the in-task branch can now ferry execution back
+    to main when the picker chooses the main slot.
+  - `scheduler_yield` gained a dual path: when `main_paused_via_irq` is set,
+    it calls the new iret helper to restore main's saved frame instead of the
+    cooperative `main_esp`.
+  - `cli` was added around the bookkeeping in the iret yield path to close
+    a race where a PIT tick mid-bookkeeping would see `in_task = 0` and
+    mis-classify the task stack as the main loop.
+
+### Failure mode
+
+With `preempt on` alone the system stays alive (the `mainsw` gate keeps the
+new path inert — main's `irq_esp` stays 0, so the picker never sees it and
+the iret yield branch's condition never fires).
+
+With `mainsw on` added, the kernel faults within ~10 ms. The fault renders
+through the crash handler in `interrupts/interrupts.c`, which paints the
+framebuffer red and draws bit-bars for the interrupt number and the saved
+EIP / err_code (later: CS, DS, and a `sched_debug_marker` global).
+
+The interrupt number bars decode to **interrupt 13 (General Protection
+Fault)** — bits 0, 2, 3.
+
+### Methodology
+
+Several debugging affordances were added because the host environment has no
+serial console wired into the QEMU `run` target:
+
+1. **Runtime gate (`mainsw`)** — splits "preemption enabled" from "atomic
+   main↔task switching enabled" so the regressions are bisected from the
+   prior known-good behavior.
+2. **Bit-bar crash diagnostic** — the fallback `interrupt_handler` paints the
+   `int_no`, `eip`, `err_code`, `cs`, and `ds` as colored bars across the
+   framebuffer (bit 0 leftmost, 10 px spacing). EIP bits decode against the
+   `kernel.elf` symbol table to locate the faulting instruction. The build
+   was also extended to produce `kernel.elf` alongside `kernel.bin` so `nm`
+   and `objdump` can be used for this mapping.
+3. **`sched_debug_marker`** — a 32-bit global written at every meaningful
+   checkpoint in the scheduler:
+   - `0x11110000 | next`  M→T atomic switch in IRQ handler
+   - `0x22220000 | from`  I→M (task→main) via IRQ picker
+   - `0x33330000 | from<<8 | next`  task→task IRQ switch
+   - `0x44440000 | old`   yield's iret-to-main path
+   - `0x55550000`          first instruction of `scheduler_task_trampoline`
+   - `0x66660000 | id`    just before calling the task's entry
+   - `0x77770000 | id`    just after the entry returned
+4. **Bisection by gate** — confirmed `preempt on` alone (no `mainsw`) keeps
+   the marker chain unchanged from prior behavior, so the regression is
+   strictly within the new atomic-switch / iret-yield code.
+
+### Root Cause
+
+The crash screen consistently shows the marker stuck at `0x11110000` with
+`next = 0` (task-a chosen by the round-robin picker, given that
+`current_task` was 1 when PIT fired). That means:
+
+- The M→T branch in `scheduler_on_timer_interrupt` ran, wrote the marker,
+  set `tasks[main].irq_esp`, set `main_paused_via_irq`, and returned
+  `tasks[next].irq_esp` to the ISR stub.
+- The ISR stub's `mov esp, eax; popa; pop ds/es/fs/gs; add esp,8; iretd`
+  chain either failed mid-stream or succeeded but trampoline's very first
+  marker write (`movl $0x55550000, sched_debug_marker` at the head of
+  `scheduler_task_trampoline`) faulted before completing — because we never
+  see `0x55550000` in the marker even though the next checkpoint after
+  M→T is exactly that trampoline write.
+
+The EIP bars (10 bits, pattern `cluster_of_3 + cluster_of_2 + single +
+cluster_of_3 + single`) match `0xbac7` — which is the trampoline's first
+marker write instruction in the current build. This places the fault on a
+write through DS to a normal kernel-BSS address (`0x1f120`).
+
+The synthetic task IRQ frame was valid only once. After a task returned to the
+IRQ-paused main loop, the task's `irq_esp` still pointed at that consumed frame.
+On the next main→task switch, the ISR epilogue restored from stale stack
+contents, so segment pops could load garbage before landing near the trampoline.
+
+The fix gives each task a persistent synthetic resume frame whose EAX slot is
+refreshed every time the task yields. The synthetic frame now irets into
+`scheduler_resume_from_saved_esp`, which loads the saved cooperative ESP and
+returns through the normal task stack. Real IRQ preemption frames can still be
+stored in `tasks[id].irq_esp` when a task is interrupted mid-run.
+
+### Known related correctness gaps (pre-existing, not introduced)
+
+- The cooperative `scheduler_poll` cooperative switch has an in-task
+  window between `in_task = 1` and the actual stack swap inside
+  `scheduler_context_switch`. With `preempt on`, a PIT tick in that
+  window can stash a mid-switch frame into `tasks[X].irq_esp`. Latent;
+  not yet a confirmed crash source.
+
+### Verification
+
+Verification performed after the fix:
+
+```text
+make -B
+git diff --check
+wc -c kernel.bin
+```
+
+A temporary test build also forced `preemptive_enabled = 1` and
+`main_switch_enabled = 1` during `scheduler_init()`, then booted in headless
+QEMU for 5 seconds with interrupt logging enabled. The serial log reached
+`MinervaOS booting...` and `FAT32 filesystem mounted`, and the QEMU interrupt
+log contained no `v=0d`, `v=0e`, `check_exception`, or triple-fault entries.
+
+Manual QEMU smoke test:
+
+```text
+preempt on
+mainsw on
+tasks
+```
+
+Observed result:
+
+```text
+M->T:45
+Y->M:45
+MSw:1
+0 task-a 152
+1 task-b 100
+2 desktop 0
+```
+
+This confirms the main↔task IRQ round-trip is stable enough to mark the
+preemptive round-robin scheduler checklist item complete. The gates remain in
+place for controlled testing while the next Phase 5 pieces are built.

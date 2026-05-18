@@ -2,6 +2,7 @@
 *.o
 *.bin
 *.img
+*.elf
 
 # Claude Code
 .claude/

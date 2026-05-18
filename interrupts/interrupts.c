@@ -122,5 +122,51 @@ uint32_t interrupt_handler(interrupt_frame_t* frame) {
                     fb[row * 320 + col] = 15;  /* white */
         }
     }
+    /* Bottom half: 32 yellow bars encoding the faulting EIP, bit 0 leftmost. */
+    for (uint8_t bit = 0; bit < 32; bit++) {
+        if (frame->eip & (1u << bit)) {
+            uint32_t bx = 4 + bit * 10;
+            for (uint32_t row = 110; row < 160; row++)
+                for (uint32_t col = bx; col < bx + 6; col++)
+                    fb[row * 320 + col] = 14;  /* yellow */
+        }
+    }
+    /* Error code in 32 white bars below EIP. */
+    for (uint8_t bit = 0; bit < 32; bit++) {
+        if (frame->err_code & (1u << bit)) {
+            uint32_t bx = 4 + bit * 10;
+            for (uint32_t row = 162; row < 178; row++)
+                for (uint32_t col = bx; col < bx + 6; col++)
+                    fb[row * 320 + col] = 15;  /* white */
+        }
+    }
+    /* Scheduler debug marker (32 cyan bars). */
+    extern uint32_t sched_debug_marker;
+    for (uint8_t bit = 0; bit < 32; bit++) {
+        if (sched_debug_marker & (1u << bit)) {
+            uint32_t bx = 4 + bit * 10;
+            for (uint32_t row = 182; row < 190; row++)
+                for (uint32_t col = bx; col < bx + 6; col++)
+                    fb[row * 320 + col] = 11;  /* cyan */
+        }
+    }
+    /* CS at fault (16 green bars, bits 0-15 in screen left half). */
+    for (uint8_t bit = 0; bit < 16; bit++) {
+        if (frame->cs & (1u << bit)) {
+            uint32_t bx = 4 + bit * 10;
+            for (uint32_t row = 192; row < 198; row++)
+                for (uint32_t col = bx; col < bx + 6; col++)
+                    fb[row * 320 + col] = 2;  /* green */
+        }
+    }
+    /* DS at fault (16 magenta bars, bits 0-15 in screen right half). */
+    for (uint8_t bit = 0; bit < 16; bit++) {
+        if (frame->ds & (1u << bit)) {
+            uint32_t bx = 164 + bit * 10;
+            for (uint32_t row = 192; row < 198; row++)
+                for (uint32_t col = bx; col < bx + 6; col++)
+                    fb[row * 320 + col] = 5;  /* magenta */
+        }
+    }
     while (1) { __asm__ volatile ("hlt"); }
 }

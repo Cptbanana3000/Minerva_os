@@ -1,7 +1,23 @@
-# MyOS — Minimal x86 Operating System
+# MinervaOS — Minimal x86 Operating System
 
-A tiny but real OS with a bootloader, 32-bit protected-mode kernel, VGA text
-output, PS/2 keyboard input, and a simple shell.
+A tiny but real OS with a bootloader, 32-bit protected-mode kernel, VGA
+graphics desktop, PS/2 keyboard and mouse input, a terminal shell, FAT32
+storage, paging, and early multitasking.
+
+## Current Status
+
+MinervaOS has completed the filesystem phase and is currently in Phase 5:
+multitasking. The preemptive round-robin scheduler slice is working behind the
+runtime gates:
+
+```text
+preempt on
+mainsw on
+tasks
+```
+
+Manual QEMU testing confirmed the main↔task IRQ round-trip is stable: `M->T`
+and `Y->M` advance together, and both demo kernel tasks continue running.
 
 ## Files
 
@@ -361,6 +377,9 @@ Real operating system behavior.
 Implement:
 
 round-robin scheduling initially
+
+Current status: a gated preemptive round-robin scheduler is working for kernel
+tasks and the desktop main-loop round trip.
 22. Processes
 
 Add:

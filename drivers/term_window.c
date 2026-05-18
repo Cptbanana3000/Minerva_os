@@ -137,6 +137,18 @@ static void tw_exec(term_window_t *t) {
         term_window_print(t, "MainCap:");
         tw_print_num(t, scheduler_main_capture_count());
         term_window_putc(t, '\n');
+        term_window_print(t, "M->T:");
+        tw_print_num(t, scheduler_main_to_task_count());
+        term_window_putc(t, '\n');
+        term_window_print(t, "I->M:");
+        tw_print_num(t, scheduler_irq_to_main_count());
+        term_window_putc(t, '\n');
+        term_window_print(t, "Y->M:");
+        tw_print_num(t, scheduler_yield_to_main_count());
+        term_window_putc(t, '\n');
+        term_window_print(t, "MSw:");
+        tw_print_num(t, scheduler_main_switch_enabled());
+        term_window_putc(t, '\n');
         scheduler_list(tw_task_entry, t);
     } else if (strcmp(cmd, "preempt") == 0) {
         term_window_print(t, "PMode:");
@@ -148,6 +160,12 @@ static void tw_exec(term_window_t *t) {
     } else if (strcmp(cmd, "preempt off") == 0) {
         scheduler_set_preemptive_enabled(0);
         term_window_print(t, "PMode:0\n");
+    } else if (strcmp(cmd, "mainsw on") == 0) {
+        scheduler_set_main_switch_enabled(1);
+        term_window_print(t, "MSw:1\n");
+    } else if (strcmp(cmd, "mainsw off") == 0) {
+        scheduler_set_main_switch_enabled(0);
+        term_window_print(t, "MSw:0\n");
     } else if (strcmp(cmd, "ls") == 0) {
         if (!fs_is_ready()) {
             term_window_print(t, "No filesystem\n");

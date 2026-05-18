@@ -25,6 +25,8 @@ void scheduler_poll(void);
 void scheduler_yield(void);
 void scheduler_set_preemptive_enabled(int enabled);
 uint32_t scheduler_preemptive_enabled(void);
+void scheduler_set_main_switch_enabled(int enabled);
+uint32_t scheduler_main_switch_enabled(void);
 uint32_t scheduler_task_count(void);
 uint32_t scheduler_current_task_id(void);
 const char *scheduler_current_task_name(void);
@@ -37,6 +39,9 @@ uint32_t scheduler_irq_preempt_switch_count(void);
 uint32_t scheduler_irq_preempt_blocked_count(void);
 uint32_t scheduler_main_capture_count(void);
 uint32_t scheduler_main_captured_esp(void);
+uint32_t scheduler_main_to_task_count(void);
+uint32_t scheduler_irq_to_main_count(void);
+uint32_t scheduler_yield_to_main_count(void);
 uint32_t scheduler_last_irq_eip(void);
 void scheduler_list(sched_list_cb_t cb, void *ctx);
 

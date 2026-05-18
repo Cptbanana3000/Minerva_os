@@ -103,7 +103,8 @@
 - [x] Main/desktop loop registered as a scheduler slot
 - [x] Main-loop IRQ frame capture (diagnostic, no switch)
 - [x] Dedicated kernel stack for the desktop main loop
-- [ ] Preemptive round-robin scheduler
+- [x] Atomic main↔task IRQ round-trip
+- [x] Preemptive round-robin scheduler
 - [ ] Process table
 - [ ] Context switching (save/restore CPU state)
 - [ ] Ring 3 userland (privilege separation)
