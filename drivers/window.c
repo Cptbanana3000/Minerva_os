@@ -4,6 +4,7 @@
 #include "window.h"
 #include "libc.h"
 #include "memory.h"
+#include "theme.h"
 
 typedef struct window {
     rect_t rect;
@@ -13,6 +14,8 @@ typedef struct window {
     uint32_t title_fg_color;
     uint8_t focused;
     uint8_t minimized;
+    uint8_t themed_bg;
+    uint8_t themed_title;
     struct window* prev;
     struct window* next;
 } window_t;
@@ -33,11 +36,13 @@ window_t* window_create(uint32_t x, uint32_t y, uint32_t width, uint32_t height,
     win->rect.y = y;
     win->rect.width = width;
     win->rect.height = height;
-    win->bg_color = graphics_rgb(200, 200, 200);
-    win->title_bg_color = graphics_rgb(0, 0, 128);
-    win->title_fg_color = graphics_rgb(255, 255, 255);
+    win->bg_color = 0;
+    win->title_bg_color = 0;
+    win->title_fg_color = 0;
     win->focused = 0;
     win->minimized = 0;
+    win->themed_bg = 1;
+    win->themed_title = 1;
     win->prev = NULL;
     win->next = NULL;
 
@@ -55,19 +60,22 @@ void window_destroy(window_t* win) {
 void window_set_bg_color(window_t* win, uint32_t color) {
     if (!win) return;
     win->bg_color = color;
+    win->themed_bg = 0;
 }
 
 void window_set_title_color(window_t* win, uint32_t bg_color, uint32_t fg_color) {
     if (!win) return;
     win->title_bg_color = bg_color;
     win->title_fg_color = fg_color;
+    win->themed_title = 0;
 }
 
 void window_draw_char(window_t* win, uint32_t x, uint32_t y, char c, uint32_t color) {
     if (!win) return;
     uint32_t screen_x = win->rect.x + WINDOW_BORDER + x;
     uint32_t screen_y = win->rect.y + TITLEBAR_HEIGHT + WINDOW_BORDER + y;
-    graphics_draw_char(screen_x, screen_y, c, color, win->bg_color);
+    uint32_t bg = win->themed_bg ? theme_color(THEME_WINDOW_BG) : win->bg_color;
+    graphics_draw_char(screen_x, screen_y, c, color, bg);
 }
 
 void window_draw_string(window_t* win, uint32_t x, uint32_t y, const char* str, uint32_t color) {
@@ -152,23 +160,33 @@ static void window_render(window_t* win) {
     uint32_t w = win->rect.width;
     uint32_t h = win->rect.height;
 
-    graphics_fill_rect(x, y, w, h, win->bg_color);
+    uint32_t bg_color = win->themed_bg ? theme_color(THEME_WINDOW_BG) : win->bg_color;
+    uint32_t title_bg = win->themed_title ? theme_color(THEME_TITLE_BG) : win->title_bg_color;
+    uint32_t title_fg = win->themed_title ? theme_color(THEME_TITLE_FG) : win->title_fg_color;
+
+    graphics_fill_rect(x, y, w, h, bg_color);
     graphics_fill_rect(x + WINDOW_BORDER, y + WINDOW_BORDER,
                        w - 2 * WINDOW_BORDER, TITLEBAR_HEIGHT - WINDOW_BORDER,
-                       win->title_bg_color);
+                       title_bg);
     graphics_draw_string(x + WINDOW_BORDER + 4, y + WINDOW_BORDER + 4,
-                         win->title, win->title_fg_color, win->title_bg_color);
+                         win->title, title_fg, title_bg);
 
     /* Close button — red X, top-right 16×16 of titlebar */
-    graphics_fill_rect(x + w - 16, y, 16, TITLEBAR_HEIGHT, 4);
-    graphics_draw_char(x + w - 12, y + 4, 'X', 15, 4);
+    graphics_fill_rect(x + w - 16, y, 16, TITLEBAR_HEIGHT,
+                       theme_color(THEME_CLOSE_BG));
+    graphics_draw_char(x + w - 12, y + 4, 'X',
+                       theme_color(THEME_CLOSE_FG),
+                       theme_color(THEME_CLOSE_BG));
 
     /* Minimize button — yellow -, just left of close */
-    graphics_fill_rect(x + w - 32, y, 16, TITLEBAR_HEIGHT, 6);
-    graphics_draw_char(x + w - 28, y + 4, '-', 0, 6);
+    graphics_fill_rect(x + w - 32, y, 16, TITLEBAR_HEIGHT,
+                       theme_color(THEME_MIN_BG));
+    graphics_draw_char(x + w - 28, y + 4, '-',
+                       theme_color(THEME_MIN_FG),
+                       theme_color(THEME_MIN_BG));
 
-    uint32_t border_color = win->focused ? graphics_rgb(255, 200, 0)
-                                         : graphics_rgb(100, 100, 100);
+    uint32_t border_color = win->focused ? theme_color(THEME_BORDER_FOCUS)
+                                         : theme_color(THEME_BORDER_IDLE);
     graphics_draw_rect(x, y, w, h, border_color);
 }
 

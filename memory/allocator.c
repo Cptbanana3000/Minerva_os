@@ -3,7 +3,7 @@
 
 #include "memory.h"
 
-#define HEAP_SIZE (256 * 1024)
+#define HEAP_SIZE (224 * 1024)
 
 typedef struct block_header {
     size_t size;

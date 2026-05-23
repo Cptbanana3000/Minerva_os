@@ -14,7 +14,8 @@ void paging_init(void) {
         page_dir[i] = 0;
 
     /* Identity-map 0x00000000 – 0x003FFFFF (4 MB).
-       Covers: kernel (0x8000+), heap, back_buffer, stack (0x90000), VGA (0xA0000). */
+       Covers: kernel (0x8000+), heap, back_buffer, bootstrap stack (0x9F000),
+       VGA (0xA0000). */
     for (int i = 0; i < 1024; i++)
         page_table0[i] = (uint32_t)(i * 4096) | PAGE_PRESENT | PAGE_WRITABLE;
 

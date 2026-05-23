@@ -87,6 +87,9 @@ def make_test_wav():
 FILES = [
     ("README.TXT", b"Welcome to MinervaOS FAT32.\nTry: ls and cat ABOUT.TXT\n"),
     ("ABOUT.TXT", b"Phase 4 has begun.\nThis file was loaded from a FAT32 disk image.\n"),
+    ("PKGS.TXT", b"THEME|THEME.PKG|Theme presets\nWEB|WEB.PKG|HTTPS browser\nSDK|SDK.PKG|App SDK seed\n"),
+    ("APPS.TXT", b"TERM|terminal|-|Shell window\nEDIT|editor|NOTE.TXT|Text editor\nVIEW|viewer|TEST.BMP|BMP viewer\nAUDIO|audio|AUDIO.WAV|WAV player\nWEB|browser|https;//example.com/|HTTPS browser\n"),
+    ("SDK.TXT", b"Minerva App SDK v1\nAPPS.TXT row: ID|launcher|target|summary\nLaunchers: terminal editor viewer audio browser\nCommands: app add ID launcher target summary; app check; app run ID\n"),
     ("NEAR.TXT", b"A" * 511),
     ("NEAR2.TXT", b"B" * 1023),
     ("TEST.BMP", make_test_bmp()),

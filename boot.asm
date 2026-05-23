@@ -110,7 +110,7 @@ init_pm:
     mov es, ax
     mov fs, ax
     mov gs, ax
-    mov ebp, 0x90000
+    mov ebp, 0x9F000
     mov esp, ebp
 
     ; Jump to kernel
@@ -157,8 +157,9 @@ msg_boot:     db "Booting MyOS...", 13, 10, 0
 msg_loaded:   db "Kernel loaded.", 13, 10, 0
 msg_disk_err: db "Disk error!", 13, 10, 0
 
-; Load up to 128 KiB at 0x8000. This stays below the 0x90000 stack.
-KERNEL_SECTORS equ 256
+; Load up to 192 KiB at 0x8000. Runtime .bss is cleared by kernel_entry.asm,
+; and the protected-mode stack lives higher in conventional memory.
+KERNEL_SECTORS equ 384
 
 ; Pad to 510 bytes and add boot signature
 times 510 - ($ - $$) db 0

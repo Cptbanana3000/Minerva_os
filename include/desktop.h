@@ -12,6 +12,7 @@ void desktop_redraw(void);
    taskbar and cursor flip — use it to paint window content each frame. */
 void desktop_set_render_cb(void (*cb)(void));
 void desktop_set_close_cb(void (*cb)(window_t *win));
+void desktop_set_content_click_cb(void (*cb)(window_t *win, int32_t x, int32_t y));
 
 /* Add a clickable icon on the wallpaper. color is a VGA palette index. */
 void desktop_add_icon(int32_t x, int32_t y, const char *label,

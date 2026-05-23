@@ -15,7 +15,7 @@
 - [x] IDT + ISR stubs (48 vectors)
 - [x] PIC remapping (8259A, IRQ0–IRQ15)
 - [x] PIT timer (IRQ0, 100 Hz)
-- [x] Heap allocator (kmalloc / kfree, 256 KB, best-fit)
+- [x] Heap allocator (kmalloc / kfree, 224 KB, best-fit)
 - [x] Serial output (COM1, 115200 baud)
 - [x] Graphics primitives (pixel, line, rect, fill, font, RGB)
 - [x] Window manager (Z-order, focus, doubly-linked list)
@@ -161,9 +161,16 @@
 - [x] Packet receive/transmit API
 - [x] Static QEMU user-net IPv4 identity (`10.0.2.15`)
 - [x] ARP request/reply handling (`net arp`)
-- [ ] TCP/IP stack
-- [ ] DNS resolver
-- [ ] HTTP client
+- [x] Minimal IPv4 packet transmit/receive
+- [x] Minimal UDP packet transmit/receive
+- [x] DNS resolver smoke test (`net dns`)
+- [x] TCP SYN/SYN-ACK/ACK handshake smoke test (`net tcp`)
+- [x] Local QEMU TCP handshake probe (`net tcp dns`)
+- [x] TCP payload send/receive smoke test
+- [x] HTTP GET smoke test (`net http`)
+- [x] HTTP response capture and terminal preview (`net page`)
+- [x] HTTP response viewer/browser integration
+- [x] Basic arbitrary HTTP host/path fetch (`net http host/path`, `browser host/path`)
 
 ---
 
@@ -171,8 +178,82 @@
 
 > Web browsing capability.
 
-- [ ] HTML renderer (basic tags)
-- [ ] CSS engine (basic styling)
+- [x] Browser window shell with HTTP response preview
+- [x] Basic URL target support for plain HTTP hosts/paths
+- [x] HTML renderer (basic tags)
+- [x] CSS engine (basic styling)
+- [x] First-link click navigation (plain HTTP, HTTPS guarded)
+- [x] Multi-link hit testing
+- [x] HTTPS/TLS TCP probe (`net tls`)
+- [x] TLS ClientHello transmit
+- [x] TLS ServerHello header parse
+- [x] TLS ServerHello fields parse
+- [x] TLS Certificate message capture
+- [x] TLS fragmented handshake byte tracking
+- [x] TLS Certificate fragment completion wait
+- [x] TLS Certificate list header parse
+- [x] TLS first certificate DER envelope parse
+- [x] TLS X.509 TBS/serial envelope parse
+- [x] TLS X.509 signature algorithm OID parse
+- [x] TLS X.509 validity envelope parse
+- [x] TLS X.509 validity date decode
+- [x] TLS X.509 public-key algorithm OID parse
+- [x] Dedicated certificate diagnostics command (`net cert`)
+- [x] TLS X.509 issuer/subject Common Name parse
+- [x] TLS X.509 first SAN DNS parse
+- [x] TLS X.509 SAN hostname match diagnostic
+- [x] TLS X.509 date validity diagnostic via RTC
+- [x] TLS X.509 Basic Constraints CA diagnostic
+- [x] TLS X.509 Key Usage diagnostic
+- [x] TLS X.509 Extended Key Usage diagnostic
+- [x] TLS leaf trust summary command (`net trust`)
+- [x] TLS known issuer diagnostic
+- [x] TLS leaf-to-intermediate chain link diagnostic
+- [x] TLS leaf certificate signature-value diagnostic
+- [x] SHA-256 digest over leaf TBSCertificate
+- [x] Compact TLS signature diagnostics command (`net sig`)
+- [x] TLS intermediate EC public-key diagnostic
+- [x] TLS ECDSA signature r/s diagnostic
+- [x] TLS P-256 verifier operand capture
+- [x] P-256 field arithmetic self-test (`net p256`)
+- [x] P-256 modular inverse self-test
+- [x] P-256 base-point/on-curve and doubling self-test
+- [x] P-256 point addition and small scalar-multiply self-test
+- [x] P-256 256-bit scalar input self-test
+- [x] P-256 group-order scalar arithmetic self-test
+- [x] ECDSA verifier scalar derivation diagnostic (`w`, `u1`, `u2`)
+- [x] ECDSA issuer public-key P-256 point validation diagnostic
+- [x] P-256 projective scalar multiplication self-test
+- [x] ECDSA P-256 signature equation diagnostic (`u1*G + u2*Q`)
+- [x] P-256 optimized/projective scalar multiplication for ECDSA
+- [x] ECDSA signature result integrated into TLS trust summary
+- [x] TLS ServerKeyExchange capture and ECDHE parameter diagnostic (`net kex`)
+- [x] TLS ServerKeyExchange signature verification
+- [x] TLS ClientKeyExchange transmit (`net cke`)
+- [x] TLS ECDHE shared-secret derivation diagnostic (`net keys`)
+- [x] TLS 1.2 master-secret PRF diagnostic (`net keys`)
+- [x] TLS key-block expansion diagnostic (`net keys`)
+- [x] TLS handshake transcript hash and Finished verify-data diagnostic (`net fin`)
+- [x] TLS AES-128-GCM client Finished record encryption
+- [x] TLS ChangeCipherSpec + encrypted Finished transmit (`net finish`)
+- [x] TLS server Finished receive/decrypt/verify (`net finish`)
+- [x] TLS application-data record crypto (`net app`)
+- [x] HTTPS GET over encrypted TLS records (`net app`)
+- [x] Browser HTTPS fetch integration (`browser https://example.com/`)
+- [x] Browser editable address bar
+- [x] Browser HTTP redirect following (`Location:` 301/302)
+- [x] Browser readable-text fallback for modern pages
+- [x] Browser HTTP header diagnostics for blank pages
+- [x] Browser source/raw preview toggle
+- [x] Browser source/raw preview scrolling
+- [x] Browser source marker jumps
+- [x] Browser source text search
+- [x] Browser document title/meta summary fallback
+- [x] Browser head metadata summary fallback
+- [x] Browser compact page-info fallback
+- [x] Browser one-step history/back navigation
+- [x] Browser reload action
+- [x] Browser home action
 - [ ] JavaScript engine (long-term goal)
 
 ---
@@ -181,10 +262,35 @@
 
 > Community-ready OS.
 
-- [ ] Package manager (pkg install)
+- [x] Package manager seed (`pkg list/info/install`)
 - [ ] Theming system (colors, icons, UI styles)
-- [ ] App SDK (third-party app support)
-- [ ] Open source release (GitHub, docs, devlogs)
+- [x] Theme palette foundation
+- [x] Theme terminal diagnostics (`theme`)
+- [x] Runtime theme switching (`theme classic`, `theme night`)
+- [x] Theme-linked default window chrome
+- [x] Theme listing/cycling commands
+- [x] Kernel image/BSS headroom guard
+- [x] FAT32 package manifest seed (`PKGS.TXT`)
+- [x] Package install marker receipts (`*.PKG`)
+- [x] Package status/remove commands
+- [x] App registry manifest seed (`APPS.TXT`)
+- [x] App launcher command (`app list/info/run`)
+- [x] Expanded bootloader kernel load window
+- [x] App manifest launch targets
+- [x] Runtime app registry append (`app add`)
+- [x] Runtime app registry removal (`app remove`)
+- [x] App registry validation (`app check`)
+- [x] In-OS App SDK reference (`sdk`, `SDK.TXT`)
+- [x] Open-source documentation refresh
+- [x] Architecture/contribution/release docs
+- [x] Issue/PR templates
+- [x] Roadmap guide and license decision note
+- [x] Changelog/devlog/support/security scaffolds
+- [x] Automated headless QEMU smoke target (`make smoke`)
+- [x] MIT license selected and added
+- [ ] App SDK (third-party executable/app-bundle support)
+- [x] Open source release prep (docs, license, templates, smoke)
+- [ ] Public GitHub release (repo publish, screenshots, labels, milestones)
 
 ---
 
@@ -200,6 +306,7 @@
 
 > Move beyond 320x200 VGA into crisp high-resolution graphics.
 
+- [x] VBE / linear framebuffer implementation plan
 - [ ] VESA BIOS Extensions / linear framebuffer boot mode
 - [ ] 800x600 and 1024x768 graphics modes
 - [ ] 1280x720 HD mode
@@ -229,7 +336,7 @@
 - [ ] PCI driver registry
 - [ ] ACPI table discovery
 - [ ] APIC / IOAPIC groundwork
-- [ ] Real-time clock driver
+- [x] Real-time clock driver
 - [ ] PS/2 compatibility cleanup
 - [ ] USB controller discovery
 - [ ] USB keyboard support
@@ -425,10 +532,10 @@
 | 4 | Filesystem | ✅ Complete |
 | 5 | Multitasking | ✅ Complete |
 | 6 | Applications | ✅ Complete |
-| 7 | Networking | ⬜ Not started |
-| 8 | Browser | ⬜ Not started |
-| 9 | Polish & Ecosystem | ⬜ Not started |
-| 10 | Modern Display & Visual System | ⬜ Long-term |
+| 7 | Networking | ✅ Complete |
+| 8 | Browser | ✅ Complete |
+| 9 | Polish & Ecosystem | 🟡 In progress |
+| 10 | Modern Display & Visual System | 🟡 Started |
 | 11 | Hardware Platform Support | ⬜ Long-term |
 | 12 | Real Userland & Executables | ⬜ Long-term |
 | 13 | System Call & POSIX-Like API | ⬜ Long-term |

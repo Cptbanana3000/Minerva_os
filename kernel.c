@@ -14,6 +14,7 @@
 #include "text_editor.h"
 #include "image_viewer.h"
 #include "audio_player.h"
+#include "browser.h"
 #include "fs.h"
 #include "scheduler.h"
 #include "process.h"
@@ -66,6 +67,10 @@ static void create_audio_player(void) {
     audio_player_open_file(92, 42, "AUDIO.WAV");
 }
 
+static void create_browser(void) {
+    browser_open(72, 22);
+}
+
 /* ------------------------------------------------------------------ */
 /* Render callback — called by desktop_redraw() after window frames    */
 /* ------------------------------------------------------------------ */
@@ -77,6 +82,8 @@ static void render_all(void) {
     if (viewer) image_viewer_render(viewer);
     audio_player_t *player = audio_player_active();
     if (player) audio_player_render(player);
+    browser_t *browser = browser_active();
+    if (browser) browser_render(browser);
 
     /* About window content redrawn every frame (window_render erases bg) */
     if (g_about && !window_is_minimized(g_about)) {
@@ -121,6 +128,17 @@ static void open_audio_player(void) {
     create_audio_player();
 }
 
+static void open_browser(void) {
+    create_browser();
+}
+
+static void content_clicked(window_t *win, int32_t x, int32_t y) {
+    browser_t *browser = browser_active();
+    if (browser && win == browser->win && browser_handle_click(browser, x, y)) {
+        desktop_redraw();
+    }
+}
+
 static void desktop_main_loop(void) {
     while (1) {
         scheduler_poll();
@@ -141,6 +159,14 @@ static void desktop_main_loop(void) {
                     !window_is_minimized(editor->win)) {
                     text_editor_handle_key(editor, c);
                     desktop_redraw();
+                } else {
+                    browser_t *browser = browser_active();
+                    if (browser &&
+                        window_manager_get_head() == browser->win &&
+                        !window_is_minimized(browser->win)) {
+                        browser_handle_key(browser, c);
+                        desktop_redraw();
+                    }
                 }
             }
         }
@@ -166,6 +192,11 @@ static void window_closed(window_t *win) {
     audio_player_t *player = audio_player_active();
     if (player && win == player->win) {
         audio_player_window_closed(player, win);
+    }
+
+    browser_t *browser = browser_active();
+    if (browser && win == browser->win) {
+        browser_window_closed(browser, win);
     }
 
     if (g_about == win) {
@@ -238,6 +269,7 @@ void kernel_main(void) {
     /* Register render callback so window content is drawn each frame */
     desktop_set_render_cb(render_all);
     desktop_set_close_cb(window_closed);
+    desktop_set_content_click_cb(content_clicked);
 
     /* Desktop icons */
     desktop_add_icon(4,  8, "Term", 10, open_terminal);  /* bright green */
@@ -245,6 +277,7 @@ void kernel_main(void) {
     desktop_add_icon(4, 72, "Edit", 14, open_editor);    /* yellow */
     desktop_add_icon(4, 104, "View", 13, open_image_viewer); /* magenta */
     desktop_add_icon(4, 136, "Aud",  12, open_audio_player); /* red */
+    desktop_add_icon(40, 8, "Web",  11, open_browser);   /* light cyan */
     STEP(8);
 
     desktop_redraw();

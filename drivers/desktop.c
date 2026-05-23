@@ -3,6 +3,7 @@
 #include "graphics.h"
 #include "window.h"
 #include "mouse.h"
+#include "theme.h"
 
 #define TASKBAR_Y    184
 #define TASKBAR_H     16
@@ -36,6 +37,7 @@ static int32_t        drag_off_y = 0;
 static uint8_t        prev_btns  = 0;
 static void         (*render_cb)(void) = NULL;
 static void         (*close_cb)(window_t *win) = NULL;
+static void         (*content_click_cb)(window_t *win, int32_t x, int32_t y) = NULL;
 
 /* ------------------------------------------------------------------ */
 /* Helpers                                                              */
@@ -98,6 +100,10 @@ static int window_click(int32_t mx, int32_t my) {
             drag_win   = w;
             drag_off_x = mx - wx;
             drag_off_y = my - wy;
+        } else if (content_click_cb) {
+            content_click_cb(w,
+                             mx - wx - WINDOW_BORDER,
+                             my - wy - TITLEBAR_HEIGHT - WINDOW_BORDER);
         }
 
         return 1;
@@ -114,6 +120,10 @@ void desktop_set_render_cb(void (*cb)(void)) {
 
 void desktop_set_close_cb(void (*cb)(window_t *win)) {
     close_cb = cb;
+}
+
+void desktop_set_content_click_cb(void (*cb)(window_t *win, int32_t x, int32_t y)) {
+    content_click_cb = cb;
 }
 
 void desktop_add_icon(int32_t x, int32_t y, const char *label,
@@ -135,6 +145,7 @@ void desktop_init(void) {
     icon_count = 0;
     render_cb  = NULL;
     close_cb   = NULL;
+    content_click_cb = NULL;
 }
 
 int desktop_process(void) {
@@ -190,7 +201,7 @@ int desktop_process(void) {
 
 void desktop_redraw(void) {
     /* Wallpaper */
-    graphics_fill_rect(0, 0, 320, TASKBAR_Y, 1);   /* dark blue */
+    graphics_fill_rect(0, 0, 320, TASKBAR_Y, theme_color(THEME_WALLPAPER));
 
     /* Icons — drawn on wallpaper before windows so windows appear on top */
     for (int i = 0; i < icon_count; i++) {
@@ -198,7 +209,7 @@ void desktop_redraw(void) {
         graphics_fill_rect((uint32_t)ic->x, (uint32_t)ic->y,
                            ICON_W, ICON_H, ic->color);
         graphics_draw_rect((uint32_t)ic->x, (uint32_t)ic->y,
-                           ICON_W, ICON_H, 15);  /* white border */
+                           ICON_W, ICON_H, theme_color(THEME_ICON_BORDER));
         /* Label centered below */
         int llen = 0;
         while (ic->label[llen]) llen++;
@@ -207,7 +218,9 @@ void desktop_redraw(void) {
         for (int ci = 0; ci < llen; ci++)
             graphics_draw_char((uint32_t)(lx + ci * 8),
                                (uint32_t)(ic->y + ICON_H + 1),
-                               ic->label[ci], 15, 1);  /* white on dark blue */
+                               ic->label[ci],
+                               theme_color(THEME_ICON_TEXT),
+                               theme_color(THEME_WALLPAPER));
     }
 
     /* Windows */
@@ -217,16 +230,20 @@ void desktop_redraw(void) {
     if (render_cb) render_cb();
 
     /* Taskbar */
-    graphics_fill_rect(0, TASKBAR_Y, 320, TASKBAR_H, 7);  /* light gray */
-    graphics_draw_line(0, TASKBAR_Y, 319, TASKBAR_Y, 0);  /* top border */
+    graphics_fill_rect(0, TASKBAR_Y, 320, TASKBAR_H, theme_color(THEME_TASKBAR));
+    graphics_draw_line(0, TASKBAR_Y, 319, TASKBAR_Y,
+                       theme_color(THEME_TASKBAR_BORDER));
 
     int32_t bx = TASK_BTN_GAP;
     window_t* w = window_manager_get_head();
     while (w && bx + TASK_BTN_W < 320) {
-        uint32_t bg = window_is_minimized(w) ? 0 : 15;
-        uint32_t fg = window_is_minimized(w) ? 7 : 0;
+        uint32_t bg = window_is_minimized(w) ? theme_color(THEME_TASK_MIN_BG)
+                                             : theme_color(THEME_TASK_ACTIVE_BG);
+        uint32_t fg = window_is_minimized(w) ? theme_color(THEME_TASK_MIN_FG)
+                                             : theme_color(THEME_TASK_ACTIVE_FG);
         graphics_fill_rect((uint32_t)bx, TASKBAR_Y + 2, TASK_BTN_W, TASKBAR_H - 4, bg);
-        graphics_draw_rect((uint32_t)bx, TASKBAR_Y + 2, TASK_BTN_W, TASKBAR_H - 4, 0);
+        graphics_draw_rect((uint32_t)bx, TASKBAR_Y + 2, TASK_BTN_W, TASKBAR_H - 4,
+                           theme_color(THEME_TASKBAR_BORDER));
 
         const char* title = window_get_title(w);
         for (int ci = 0; ci < 6 && title[ci]; ci++)
